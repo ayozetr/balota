@@ -4,12 +4,16 @@ import {
   ClipboardCopy,
   ExternalLink,
   Gauge,
+  Github,
+  Heart,
   RefreshCw,
 } from "lucide-react";
 import type { AppConfig, SteamEnvironment } from "../types";
-import { copyToClipboard, openSteamProperties } from "../api";
+import { copyToClipboard, openSteamProperties, openUrl } from "../api";
+import { KOFI_URL, REPO_URL } from "../links";
 
 const LAUNCH_OPTIONS = "gamemoderun mangohud %command%";
+const APP_VERSION = "0.2.0";
 
 interface Props {
   config: AppConfig;
@@ -166,6 +170,35 @@ export default function SettingsTab({
             Detect again
           </button>
         </div>
+      </section>
+
+      <section className="section">
+        <h3 className="section-title">About</h3>
+        <p className="hint">
+          Balota {APP_VERSION} · MIT licence · © 2026 Ayoze Torres. Server data
+          comes from the public dayzsalauncher.com API.
+        </p>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-sm" onClick={() => openUrl(REPO_URL)}>
+            <Github size={13} />
+            github.com/ayozetr/balota
+          </button>
+          <button className="btn btn-sm" onClick={() => openUrl(KOFI_URL)}>
+            <Heart size={13} />
+            Support on Ko-fi
+          </button>
+        </div>
+
+        <p className="hint" style={{ marginTop: 4 }}>
+          Balota is an unofficial tool built by the community. It is not affiliated
+          with, authorised by or endorsed by Bohemia Interactive a.s., Valve
+          Corporation or DZSA Launcher. Bohemia Interactive, ARMA, DayZ and all
+          associated logos and designs are trademarks or registered trademarks of
+          Bohemia Interactive a.s. Steam and the Steam logo are trademarks of Valve
+          Corporation. All other trademarks are the property of their respective
+          owners.
+        </p>
       </section>
     </div>
   );

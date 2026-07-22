@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   FolderCheck,
+  Github,
+  Heart,
   History,
   Loader2,
   RefreshCw,
@@ -24,6 +26,7 @@ import WindowControls from "./components/WindowControls";
 import ResizeEdges from "./components/ResizeEdges";
 import { useMaximized } from "./useMaximized";
 import { formatNumber, timeAgo } from "./format";
+import { KOFI_URL, REPO_URL } from "./links";
 import * as api from "./api";
 import type {
   AppConfig,
@@ -327,6 +330,23 @@ export default function App() {
           ))}
         </nav>
 
+        <div className="sidebar-links">
+          <button
+            className="sidebar-link"
+            onClick={() => api.openUrl(REPO_URL)}
+            title="View the source on GitHub"
+          >
+            <Github size={14} />
+            ayozetr
+          </button>
+          <button
+            className="sidebar-link"
+            onClick={() => api.openUrl(KOFI_URL)}
+            title="Support Balota on Ko-fi"
+          >
+            <Heart size={14} />
+          </button>
+        </div>
         <div className="status-card">
           <div className="status-row">
             <span>Steam</span>
@@ -345,6 +365,7 @@ export default function App() {
             <span>{status ? formatNumber(status.total) : "…"}</span>
           </div>
         </div>
+
       </aside>
 
       <main className="main">

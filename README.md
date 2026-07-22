@@ -135,8 +135,24 @@ The Proton mod-loading dance, the DZSA endpoints and the A2S challenge are writt
 
 Server data comes from the public [dayzsalauncher.com](https://dayzsalauncher.com) API.
 
-Not affiliated with Bohemia Interactive or DZSA Launcher.
+## Legal
+
+Balota is an unofficial tool built by the community. It is not affiliated with,
+authorised by or endorsed by Bohemia Interactive a.s., Valve Corporation or DZSA
+Launcher.
+
+Bohemia Interactive, ARMA, DayZ and all associated logos and designs are trademarks or
+registered trademarks of Bohemia Interactive a.s. Steam and the Steam logo are
+trademarks of Valve Corporation. All other trademarks are the property of their
+respective owners.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). © 2026 Ayoze Torres.
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/ayozetr">@ayozetr</a> ·
+  <a href="https://ko-fi.com/ayozetr">Support on Ko-fi</a>
+</p>
