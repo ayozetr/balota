@@ -145,15 +145,13 @@ input[type="checkbox"] {
   border-bottom: 1px solid var(--border);
 }
 
+/* The logo has no background of its own; it sits straight on the dark
+   sidebar, where its own contrast carries it. */
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(140deg, #2b3448, #10141f);
-  border: 1px solid var(--border-strong);
-  color: var(--red);
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .brand-name {

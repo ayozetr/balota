@@ -10,10 +10,10 @@ import {
   Settings as SettingsIcon,
   Star,
   Terminal,
-  Radio,
   X,
 } from "lucide-react";
 
+import logo from "./assets/logo.png";
 import FilterBar from "./components/FilterBar";
 import HistoryTab from "./components/HistoryTab";
 import ModsTab from "./components/ModsTab";
@@ -290,9 +290,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">
-            <Radio size={19} />
-          </div>
+          <img className="brand-mark" src={logo} alt="" width={44} height={44} />
           <div>
             <div className="brand-name">Balota</div>
             <span className="brand-sub">DayZ · Linux</span>

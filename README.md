@@ -1,6 +1,10 @@
-# Balota
+<p align="center">
+  <img src="docs/logo.png" alt="" width="200">
+</p>
 
-**DayZ server browser and mod manager for Linux and the Steam Deck.**
+<h1 align="center">Balota</h1>
+
+<p align="center"><strong>DayZ server browser and mod manager for Linux and the Steam Deck.</strong></p>
 
 DZSA Launcher — the tool everyone uses to find modded DayZ servers — is Windows only.
 Balota does that job natively on Linux: it lists every DayZ server, resolves the mods
