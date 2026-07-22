@@ -40,9 +40,10 @@ No packages yet — build from source.
 
 | Distro | Command |
 | --- | --- |
-| Arch, CachyOS, SteamOS | `sudo pacman -S --needed webkit2gtk-4.1 gtk3 base-devel curl wget file` |
-| Debian, Ubuntu | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev build-essential curl wget file libssl-dev librsvg2-dev` |
-| Fedora | `sudo dnf install webkit2gtk4.1-devel gtk3-devel openssl-devel gcc-c++ librsvg2-devel` |
+| Arch, CachyOS, EndeavourOS | `sudo pacman -S --needed webkit2gtk-4.1 gtk3 base-devel curl wget file` |
+| Debian, Ubuntu, Mint, Pop!_OS | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev build-essential curl wget file libssl-dev librsvg2-dev` |
+| Fedora, Nobara | `sudo dnf install webkit2gtk4.1-devel gtk3-devel openssl-devel gcc-c++ librsvg2-devel` |
+| Bazzite, SteamOS, Silverblue | see below — these are immutable |
 
 Plus [Rust](https://rustup.rs) 1.77+ and Node.js 18+.
 
@@ -58,6 +59,26 @@ npm run app:build    # AppImage + .deb in src-tauri/target/release/bundle/
 
 The release binary is ~5 MB; the AppImage carries its own GTK/WebKit payload and needs
 no runtime dependencies.
+
+### Immutable distros (Bazzite, SteamOS, Silverblue)
+
+The system image is read-only, so build dependencies do not belong on the host. Use the
+AppImage if you just want to run Balota — it bundles everything and needs nothing
+installed.
+
+To build it yourself, do it inside a container (`distrobox` ships with Bazzite and
+SteamOS):
+
+```bash
+distrobox create --name balota --image fedora:41
+distrobox enter balota
+sudo dnf install webkit2gtk4.1-devel gtk3-devel openssl-devel gcc-c++ librsvg2-devel \
+  nodejs npm git
+# then the normal build; the resulting AppImage runs on the host
+```
+
+Do not reach for `rpm-ostree install` for this: it layers development packages onto
+every future system update for no reason, and needs a reboot each time.
 
 ## Using it
 
