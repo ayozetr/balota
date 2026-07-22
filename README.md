@@ -24,6 +24,9 @@ Steam with the symlinks Proton needs to load them.
 - **Finds DayZ wherever it lives.** Reads `libraryfolders.vdf`, so a second drive or the
   Steam Deck's SD card is covered, and `appmanifest_221100.acf`, so a renamed install
   folder still works. Native, Flatpak and Snap Steam.
+- **Mod housekeeping.** The Mods tab lists what is installed and unsubscribes in bulk,
+  which is how mods actually leave the system — Steam deletes the files and stops
+  tracking them.
 - Favourites, join history, and filters by map, mods, perspective, occupancy and
   password.
 
@@ -59,8 +62,8 @@ no runtime dependencies.
 ## Using it
 
 1. Pick a server. Clicking one queries it live and lists its mods.
-2. **Install missing** opens the Workshop page of every mod you lack. Subscribe to each,
-   let Steam download them, then hit **Re-check**.
+2. **Subscribe & install** subscribes to the whole list at once, so Steam downloads the
+   mods and keeps them updated from then on. Progress updates on its own.
 3. **Join server** creates the symlinks and launches DayZ through Steam.
 
 Steam has to be running (Balota starts it otherwise; with the Flatpak build, start it
@@ -68,9 +71,11 @@ yourself first).
 
 ## Deliberate limitations
 
-- **Mods are installed by opening their Workshop page.** Balota will never ask for your
-  Steam credentials, which rules out the fully automated route (SteamCMD with a login):
-  Steam Guard, 2FA and the ToS make it a bad trade for a launcher.
+- **Subscribing identifies Balota as DayZ.** Subscribing goes through the Steamworks
+  SDK, which means announcing AppID 221100 to Steam — so Steam shows you as playing DayZ
+  for the few seconds the helper runs. It is confined to a separate short-lived process
+  for exactly that reason. If Steam is closed, Balota falls back to downloading the mods
+  unsubscribed and says so.
 - **GameMode and MangoHud are not toggles.** They cannot work from here.
   `steam -applaunch` only hands a request to the running Steam client, which spawns the
   game itself — wrapping that command wraps nothing. Settings shows the string to paste

@@ -55,6 +55,13 @@ src-tauri/src/
   config.rs    ~/.config/balota/config.json
   vdf.rs       Minimal KeyValues parser for Steam's own files.
 
+src-tauri/workshop-helper/
+  A separate binary that subscribes and unsubscribes Workshop items through the
+  Steamworks SDK. Separate on purpose: initialising the SDK announces AppID
+  221100, which makes Steam report the user as playing DayZ, so it runs for
+  seconds and exits. `npm run helper` builds it and stages it (plus the
+  redistributable libsteam_api.so) into src-tauri/binaries/ as a Tauri sidecar.
+
 src/
   App.tsx           State, tabs, the loading pipeline.
   api.ts            Typed wrappers over invoke(). No component calls invoke directly.

@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import type { ServerDetails } from "../types";
-import { openWorkshopPage, serverDetails, subscribeMods } from "../api";
+import { modsInstalled, openWorkshopPage, serverDetails, subscribeMods } from "../api";
 
 interface Props {
   serverId: string;
@@ -28,7 +28,9 @@ export default function ServerModal({
 }: Props) {
   const [details, setDetails] = useState<ServerDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subscribing, setSubscribing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  /** How many of the mods requested for download have landed so far. */
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   async function load(refresh: boolean) {
     setLoading(true);
@@ -58,19 +60,59 @@ export default function ServerModal({
     const missing = details.mods.filter((m) => !m.installed).map((m) => m.id);
     if (missing.length === 0) return;
 
-    setSubscribing(true);
+    setDownloading(true);
+    setProgress({ done: 0, total: missing.length });
+
     try {
-      await subscribeMods(missing);
-      onNotice(
-        `Opened ${missing.length} Workshop page(s). Hit Subscribe on each, wait for Steam to ` +
-          `download them, then press Re-check.`,
-      );
+      const result = await subscribeMods(missing);
+      if (result.warning) {
+        onError(result.warning);
+      } else {
+        onNotice(
+          `Subscribed to ${result.count} mod(s). Steam is downloading them in the background ` +
+            `and will keep them updated from now on.`,
+        );
+      }
     } catch (e) {
       onError(String(e));
-    } finally {
-      setSubscribing(false);
+      setDownloading(false);
     }
   }
+
+  // While a download runs, poll the folder instead of making the user press
+  // Re-check. Steam gives no completion signal, so watching the disk is it.
+  useEffect(() => {
+    if (!downloading || !details) return;
+
+    const pending = details.mods.filter((m) => !m.installed).map((m) => m.id);
+    if (pending.length === 0) {
+      setDownloading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const done = await modsInstalled(pending);
+        if (cancelled) return;
+
+        setProgress({ done: done.length, total: pending.length });
+        if (done.length === pending.length) {
+          setDownloading(false);
+          await load(false);
+          onNotice("All mods downloaded. You can join now.");
+        }
+      } catch {
+        // A failed poll is not worth reporting; the next tick retries.
+      }
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloading, details]);
 
   const server = details?.server;
   const missing = details?.missingCount ?? 0;
@@ -161,17 +203,15 @@ export default function ServerModal({
 
         <div className="modal-foot">
           {missing > 0 && (
-            <button
-              className="btn"
-              onClick={installMissing}
-              disabled={subscribing}
-            >
-              {subscribing ? (
+            <button className="btn" onClick={installMissing} disabled={downloading}>
+              {downloading ? (
                 <Loader2 size={14} className="spin" />
               ) : (
                 <Download size={14} />
               )}
-              Install {missing} missing
+              {downloading
+                ? `Installing ${progress.done}/${progress.total}`
+                : `Subscribe & install ${missing}`}
             </button>
           )}
 

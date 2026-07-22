@@ -5,11 +5,12 @@ launcher: get into a modded server without fighting the tooling.
 
 ## Next
 
-- **Watch the Workshop folder.** After "Install missing", poll for the downloads and
-  flip each mod to installed on its own, so nobody has to press Re-check.
 - **Mod update detection.** A server rejects you when your copy of a mod is older than
-  its own. Compare the local `meta.cpp` timestamp against the Workshop item and warn
-  before launching, which turns a cryptic kick into a clear message.
+  its own, and downloaded items do not auto-update. Compare the local `meta.cpp`
+  timestamp against the Workshop item and offer a re-download, which turns a cryptic
+  kick into a clear message.
+- **Surface download size before starting.** Forty mods can be several GB; the user
+  should see that number before committing to it.
 - **Remember the last filters.** Filter state is in-memory only right now.
 - **Auto-retry the master list.** One failed request currently leaves the list empty
   until the user presses Refresh.

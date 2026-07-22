@@ -10,7 +10,6 @@ mod steam;
 mod vdf;
 
 use std::path::Path;
-use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{Manager, State};
@@ -221,21 +220,120 @@ async fn installed_mods(
     .map_err(|e| format!("Could not read the mod folder: {e}"))
 }
 
-/// Opens the Workshop page of every missing mod so the user can subscribe.
-/// This is the route that does not require the user's Steam credentials.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ModActionResult {
+    /// How many items Steam accepted.
+    count: usize,
+    /// True when we had to fall back to a plain download because the Workshop
+    /// helper could not run — the mods arrive, but unsubscribed.
+    downloaded_only: bool,
+    /// Why the fallback kicked in, so the UI can be honest about it.
+    warning: Option<String>,
+}
+
+/// Subscribes to every missing mod. Subscribing (rather than just downloading)
+/// is what makes Steam keep the mods updated and lets the user drop them later.
+///
+/// If the helper cannot run — Steam closed, `libsteam_api.so` missing — this
+/// falls back to a plain download so the user can still play, and says so.
 #[tauri::command]
-async fn subscribe_mods(ids: Vec<u64>) -> Result<usize, String> {
+async fn subscribe_mods(
+    state: State<'_, AppState>,
+    ids: Vec<u64>,
+) -> Result<ModActionResult, String> {
+    let env = current_env(&state).await;
     let total = ids.len();
 
-    for (index, id) in ids.into_iter().enumerate() {
-        steam::open_url(&format!("steam://url/CommunityFilePage/{id}"))?;
-        // Steam chokes when these arrive all at once; give it room to breathe.
-        if index + 1 < total {
-            tokio::time::sleep(Duration::from_millis(700)).await;
+    let outcome = tokio::task::spawn_blocking({
+        let env = env.clone();
+        let ids = ids.clone();
+        move || steam::workshop_action(&env, true, &ids)
+    })
+    .await
+    .map_err(|e| format!("Could not subscribe: {e}"))?;
+
+    match outcome {
+        Ok(result) => Ok(ModActionResult {
+            count: result.ok.len(),
+            downloaded_only: false,
+            warning: (!result.failed.is_empty() || !result.timed_out.is_empty()).then(|| {
+                format!(
+                    "{} of {total} item(s) did not go through. Try again in a moment.",
+                    result.failed.len() + result.timed_out.len()
+                )
+            }),
+        }),
+        Err(reason) => {
+            // Subscribing failed; at least get the files down so the user can
+            // play, and be explicit that Steam will not keep them updated.
+            tokio::task::spawn_blocking(move || steam::download_workshop_items(&env, &ids))
+                .await
+                .map_err(|e| format!("Could not start the download: {e}"))??;
+
+            Ok(ModActionResult {
+                count: total,
+                downloaded_only: true,
+                warning: Some(format!(
+                    "Could not subscribe ({reason}). Downloading instead — the mods will work, \
+                     but Steam will not auto-update them."
+                )),
+            })
         }
     }
+}
 
-    Ok(total)
+/// Subscription state for the given mods, so the UI can flag the ones Steam
+/// does not track and offer to delete them instead.
+#[tauri::command]
+async fn mod_states(
+    state: State<'_, AppState>,
+    ids: Vec<u64>,
+) -> Result<Vec<steam::ItemState>, String> {
+    let env = current_env(&state).await;
+
+    tokio::task::spawn_blocking(move || steam::workshop_states(&env, &ids))
+        .await
+        .map_err(|e| format!("Could not query Steam: {e}"))?
+}
+
+/// Deletes mods Steam does not track. Unsubscribing cannot remove these,
+/// because there is no subscription to drop.
+#[tauri::command]
+async fn delete_mods(state: State<'_, AppState>, ids: Vec<u64>) -> Result<usize, String> {
+    let env = current_env(&state).await;
+    let workshop = env.workshop_dir.clone();
+
+    tokio::task::spawn_blocking(move || {
+        steam::delete_mod_folders(workshop.as_deref().map(Path::new), &ids)
+    })
+    .await
+    .map_err(|e| format!("Could not delete the mods: {e}"))?
+}
+
+/// Drops the subscription for these mods. Steam removes the files itself.
+#[tauri::command]
+async fn unsubscribe_mods(state: State<'_, AppState>, ids: Vec<u64>) -> Result<usize, String> {
+    let env = current_env(&state).await;
+
+    let outcome = tokio::task::spawn_blocking(move || steam::workshop_action(&env, false, &ids))
+        .await
+        .map_err(|e| format!("Could not unsubscribe: {e}"))??;
+
+    Ok(outcome.ok.len())
+}
+
+/// Which of these mods are on disk right now. Polled while a download runs.
+#[tauri::command]
+async fn mods_installed(state: State<'_, AppState>, ids: Vec<u64>) -> Result<Vec<u64>, String> {
+    let env = current_env(&state).await;
+    let workshop = env.workshop_dir.clone();
+
+    tokio::task::spawn_blocking(move || {
+        steam::installed_ids(workshop.as_deref().map(Path::new), &ids)
+    })
+    .await
+    .map_err(|e| format!("Could not read the mod folder: {e}"))
 }
 
 #[tauri::command]
@@ -348,6 +446,10 @@ fn main() {
             ping_servers,
             installed_mods,
             subscribe_mods,
+            unsubscribe_mods,
+            mod_states,
+            delete_mods,
+            mods_installed,
             prune_symlinks,
             launch_game,
             open_url,

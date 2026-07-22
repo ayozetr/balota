@@ -154,9 +154,54 @@ does nothing — GameMode and MangoHud have to go into Steam's per-game launch o
 
 ## 5. Installing mods
 
-Without the user's Steam credentials there is no fully automated path. What Balota does
-is open `steam://url/CommunityFilePage/<id>` for each missing mod so the user can
-subscribe, then re-check the Workshop folder. Steam handles the download.
+### Subscribing (the good path)
 
-Anonymous SteamCMD does not work for DayZ Workshop items, and asking a launcher's users
-for their Steam password is not a trade worth making.
+Downloading a mod is not the same as subscribing to it. A downloaded item sits on disk
+and rots: Steam does not update it, and there is no obvious way to get rid of it.
+Subscribing is what users actually want — automatic updates, and one click to drop the
+mod when moving to another server.
+
+The client exposes no console command for it, but the Steamworks SDK does:
+`ISteamUGC::SubscribeItem()` and `UnsubscribeItem()`. Balota calls them from a separate
+`balota-workshop` process, for two reasons:
+
+- Initialising the SDK means announcing **AppID 221100**, so Steam reports the user as
+  *playing DayZ* for as long as the process lives. A few seconds is fine; a whole
+  session is not.
+- A crash inside Valve's library takes down the helper, not the launcher.
+
+`libsteam_api.so` is taken from the user's own Steam install (`steamrt64/`, `linux64/`),
+so nothing of Valve's has to be redistributed. The AppImage is the exception: it ships
+the redistributable copy next to the helper, because host paths may not be reachable
+from inside it.
+
+### Downloading (the fallback)
+
+When the helper cannot run — Steam closed, library missing — the client will still fetch
+Workshop items on request, and every ID can go in one invocation:
+
+```bash
+steam +workshop_download_item 221100 <id> +workshop_download_item 221100 <id> …
+```
+
+It returns immediately, Steam queues the items and downloads them in the background, and
+the content lands in `steamapps/workshop/content/221100/<id>` — exactly where the
+symlinks need it. No credentials are involved: it reuses the session the client already
+has. Under Flatpak, the same arguments go after
+`flatpak run … com.valvesoftware.Steam`.
+
+**What not to do.** The obvious alternative is opening
+`steam://url/CommunityFilePage/<id>` per mod so the user can hit Subscribe. It looks
+reasonable with three mods and falls apart with forty: the pages hit Steam's *web*
+frontend, which rate-limits that burst as abuse and answers with a temporary block —
+locking the user out of the very pages they need. Spacing the requests out does not fix
+it either; it just takes longer to get blocked, and forty tabs is not a workflow anyone
+should be handed. Balota opens a Workshop page only when the user clicks one specific
+mod.
+
+Items obtained this way are **not subscribed**, so Steam will not keep them up to date;
+downloading again is the refresh. Either way Steam reports no completion event, so
+progress is tracked by watching the content folder for the IDs that were requested.
+
+Anonymous SteamCMD is not an option for DayZ Workshop content, and asking a launcher's
+users for their Steam password is not a trade worth making.

@@ -1,0 +1,10 @@
+[package]
+name = "balota-workshop"
+version = "0.2.0"
+description = "Balota's Steam Workshop helper: subscribes and unsubscribes mods"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+
+[dependencies]
+steamworks = "0.13"

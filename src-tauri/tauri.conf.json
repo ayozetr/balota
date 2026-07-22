@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": ["appimage", "deb"],
+    "externalBin": ["binaries/balota-workshop"],
     "category": "Game",
     "shortDescription": "Navegador de servidores de DayZ para Linux",
     "longDescription": "Balota lista los servidores de DayZ, resuelve los mods que exige cada uno y lanza el juego a través de Steam con los enlaces simbólicos que Proton necesita.",

@@ -594,6 +594,262 @@ pub fn launch(env: &SteamEnvironment, req: &LaunchRequest) -> Result<LaunchOutco
     })
 }
 
+/// Asks the running Steam client to download Workshop items.
+///
+/// This is the client's own content pipeline: no web requests, so no rate
+/// limiting, and it reuses the session Steam already has — the launcher never
+/// sees a credential. Every ID goes in a single invocation, which Steam queues
+/// and downloads in the background.
+///
+/// The alternative — opening one Workshop page per mod so the user can hit
+/// Subscribe — does not survive contact with reality: a 40-mod server means 40
+/// page loads, which Steam's web frontend rate-limits as abuse and answers with
+/// a temporary block.
+///
+/// Caveat: downloaded items are not *subscribed* items, so Steam will not
+/// auto-update them. Re-running this for an ID re-downloads it, which is how an
+/// out-of-date mod gets refreshed.
+pub fn download_workshop_items(env: &SteamEnvironment, mod_ids: &[u64]) -> Result<String, String> {
+    if mod_ids.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut args: Vec<String> = Vec::new();
+    let program = if env.is_flatpak {
+        args.extend(
+            [
+                "run",
+                "--branch=stable",
+                "--arch=x86_64",
+                "--command=/app/bin/steam-wrapper",
+                FLATPAK_STEAM_ID,
+            ]
+            .map(String::from),
+        );
+        "flatpak"
+    } else {
+        "steam"
+    };
+
+    for id in mod_ids {
+        args.push("+workshop_download_item".into());
+        args.push(DAYZ_APP_ID.into());
+        args.push(id.to_string());
+    }
+
+    Command::new(program)
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Could not ask Steam to download the mods: {e}"))?;
+
+    Ok(format!("{program} {}", args.join(" ")))
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkshopOutcome {
+    #[serde(default)]
+    pub ok: Vec<u64>,
+    #[serde(default)]
+    pub failed: Vec<WorkshopFailure>,
+    #[serde(default)]
+    pub timed_out: Vec<u64>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkshopFailure {
+    pub id: u64,
+    pub error: String,
+}
+
+/// Looks for the `balota-workshop` helper alongside a given executable
+/// directory. Split out from `helper_path` so the lookup order is testable
+/// without depending on where the test binary happens to live.
+fn helper_in(dir: &Path) -> Option<PathBuf> {
+    let candidates = [
+        dir.join("balota-workshop"),
+        // Tauri sidecars keep their target-triple suffix in some layouts.
+        dir.join("balota-workshop-x86_64-unknown-linux-gnu"),
+        dir.join("../lib/balota/balota-workshop"),
+    ];
+
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+/// Locates the helper: next to the running executable when installed or
+/// bundled, in the Cargo target directory during development.
+fn helper_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    helper_in(exe.parent()?)
+}
+
+/// Where to find `libsteam_api.so`.
+///
+/// The user's own Steam install is preferred, so a `.deb` or a source build
+/// needs no copy of Valve's library at all. Inside an AppImage the bundled copy
+/// next to the helper is used instead, since the host paths may not exist.
+fn steam_lib_dirs(env: &SteamEnvironment, helper: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Some(root) = &env.steam_root {
+        let root = Path::new(root);
+        dirs.push(root.join("steamrt64"));
+        dirs.push(root.join("linux64"));
+        dirs.push(root.join("ubuntu12_64"));
+    }
+
+    if let Some(helper_dir) = helper.parent() {
+        dirs.push(helper_dir.to_path_buf());
+        dirs.push(helper_dir.join("../lib"));
+    }
+
+    dirs.retain(|dir| dir.join("libsteam_api.so").is_file());
+    dirs
+}
+
+/// Subscribes or unsubscribes Workshop items through the helper process.
+///
+/// Subscribing is what the user actually wants: Steam then keeps the mods
+/// updated on its own and they can be removed from the Steam UI later, which
+/// downloading alone does not give you.
+pub fn workshop_action(
+    env: &SteamEnvironment,
+    subscribe: bool,
+    mod_ids: &[u64],
+) -> Result<WorkshopOutcome, String> {
+    if mod_ids.is_empty() {
+        return Ok(WorkshopOutcome::default());
+    }
+
+    let helper = helper_path().ok_or("The balota-workshop helper is missing")?;
+    let lib_dirs = steam_lib_dirs(env, &helper);
+    if lib_dirs.is_empty() {
+        return Err("Could not find libsteam_api.so in the Steam installation".to_string());
+    }
+
+    let mut command = Command::new(helper);
+    command
+        .arg(if subscribe {
+            "subscribe"
+        } else {
+            "unsubscribe"
+        })
+        .args(mod_ids.iter().map(u64::to_string))
+        .env(
+            "LD_LIBRARY_PATH",
+            std::env::join_paths(&lib_dirs).map_err(|e| e.to_string())?,
+        )
+        .stdin(Stdio::null())
+        .stderr(Stdio::null());
+
+    let output = command
+        .output()
+        .map_err(|e| format!("Could not run the Workshop helper: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout
+        .lines()
+        .last()
+        .ok_or("The Workshop helper returned nothing")?;
+
+    let outcome: WorkshopOutcome = serde_json::from_str(line)
+        .map_err(|e| format!("Unreadable reply from the Workshop helper: {e}"))?;
+
+    if let Some(error) = &outcome.error {
+        return Err(error.clone());
+    }
+
+    Ok(outcome)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ItemState {
+    pub id: u64,
+    pub subscribed: bool,
+    pub installed: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct StateReply {
+    #[serde(default)]
+    items: Vec<ItemState>,
+}
+
+/// Asks Steam which of these items are actually subscribed.
+///
+/// A mod can sit in the Workshop folder without Steam knowing about it — that
+/// is what a plain download leaves behind. Those never update, and
+/// unsubscribing cannot remove them because there is no subscription to drop;
+/// the only way out is deleting the folder.
+pub fn workshop_states(env: &SteamEnvironment, mod_ids: &[u64]) -> Result<Vec<ItemState>, String> {
+    if mod_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let helper = helper_path().ok_or("The balota-workshop helper is missing")?;
+    let lib_dirs = steam_lib_dirs(env, &helper);
+    if lib_dirs.is_empty() {
+        return Err("Could not find libsteam_api.so in the Steam installation".to_string());
+    }
+
+    let output = Command::new(helper)
+        .arg("state")
+        .args(mod_ids.iter().map(u64::to_string))
+        .env(
+            "LD_LIBRARY_PATH",
+            std::env::join_paths(&lib_dirs).map_err(|e| e.to_string())?,
+        )
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|e| format!("Could not query Steam: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout.lines().last().ok_or("Steam returned nothing")?;
+
+    let reply: StateReply =
+        serde_json::from_str(line).map_err(|e| format!("Unreadable reply from Steam: {e}"))?;
+
+    Ok(reply.items)
+}
+
+/// Deletes downloaded mod folders outright. Only for items Steam does not
+/// track: anything subscribed would simply be restored on the next sync.
+pub fn delete_mod_folders(workshop_dir: Option<&Path>, mod_ids: &[u64]) -> Result<usize, String> {
+    let workshop_dir = workshop_dir.ok_or("No Workshop folder detected")?;
+    let mut removed = 0;
+
+    for id in mod_ids {
+        let path = workshop_dir.join(id.to_string());
+        // Guard against a stray id deleting something outside the folder.
+        if !path.starts_with(workshop_dir) || !path.is_dir() {
+            continue;
+        }
+        fs::remove_dir_all(&path).map_err(|e| format!("Could not delete mod {id}: {e}"))?;
+        removed += 1;
+    }
+
+    Ok(removed)
+}
+
+/// Which of these mods are already on disk.
+pub fn installed_ids(workshop_dir: Option<&Path>, mod_ids: &[u64]) -> Vec<u64> {
+    let Some(workshop_dir) = workshop_dir else {
+        return Vec::new();
+    };
+
+    mod_ids
+        .iter()
+        .copied()
+        .filter(|id| workshop_dir.join(id.to_string()).is_dir())
+        .collect()
+}
+
 /// Opens a URL in the browser or in the Steam client. Only the schemes the app
 /// actually needs are allowed through.
 pub fn open_url(url: &str) -> Result<(), String> {
@@ -643,5 +899,54 @@ mod tests {
     fn only_known_url_schemes_are_opened() {
         assert!(open_url("file:///etc/passwd").is_err());
         assert!(open_url("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn finds_the_workshop_helper_next_to_the_binary() {
+        let dir = std::env::temp_dir().join(format!("balota-helper-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+
+        assert!(helper_in(&dir).is_none(), "nothing there yet");
+
+        let helper = dir.join("balota-workshop");
+        fs::write(&helper, b"#!/bin/true").unwrap();
+        assert_eq!(helper_in(&dir), Some(helper));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn library_lookup_prefers_the_users_steam_over_the_bundled_copy() {
+        let base = std::env::temp_dir().join(format!("balota-libs-{}", std::process::id()));
+        let steam = base.join("Steam/steamrt64");
+        let bundled = base.join("bundle");
+        fs::create_dir_all(&steam).unwrap();
+        fs::create_dir_all(&bundled).unwrap();
+
+        let env = SteamEnvironment {
+            steam_found: true,
+            is_flatpak: false,
+            steam_running: true,
+            steam_root: Some(base.join("Steam").to_string_lossy().to_string()),
+            libraries: Vec::new(),
+            dayz_dir: None,
+            workshop_dir: None,
+            dayz_found: false,
+            notes: Vec::new(),
+        };
+        let helper = bundled.join("balota-workshop");
+
+        // Neither copy exists yet, so there is nothing to point at.
+        assert!(steam_lib_dirs(&env, &helper).is_empty());
+
+        // Only the bundled one: it gets used (this is the AppImage case).
+        fs::write(bundled.join("libsteam_api.so"), b"x").unwrap();
+        assert_eq!(steam_lib_dirs(&env, &helper), vec![bundled.clone()]);
+
+        // With Steam's own copy present, that one comes first.
+        fs::write(steam.join("libsteam_api.so"), b"x").unwrap();
+        assert_eq!(steam_lib_dirs(&env, &helper)[0], steam);
+
+        fs::remove_dir_all(&base).ok();
     }
 }

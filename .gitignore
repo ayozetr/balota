@@ -46,3 +46,4 @@ src-tauri/binaries/
 *.log
 .cache/
 coverage/
+src-tauri/binaries/

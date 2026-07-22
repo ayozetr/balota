@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   InstalledMod,
+  ItemState,
+  ModActionResult,
   LaunchOutcome,
   LaunchRequest,
   ListStatus,
@@ -35,8 +37,27 @@ export const pingServers = (ids: string[], timeoutMs?: number) =>
 export const installedMods = (withSizes = false) =>
   invoke<InstalledMod[]>("installed_mods", { withSizes });
 
+/** Subscribes through Steam, so the mods stay updated and can be dropped
+ *  later. Falls back to a plain download if the helper cannot run. */
 export const subscribeMods = (ids: number[]) =>
-  invoke<number>("subscribe_mods", { ids });
+  invoke<ModActionResult>("subscribe_mods", { ids });
+
+/** Drops the subscription; Steam removes the files itself. */
+export const unsubscribeMods = (ids: number[]) =>
+  invoke<number>("unsubscribe_mods", { ids });
+
+/** Which of these Steam actually tracks. Anything not subscribed is a leftover
+ *  download that unsubscribing cannot remove. */
+export const modStates = (ids: number[]) =>
+  invoke<ItemState[]>("mod_states", { ids });
+
+/** Deletes leftover downloads outright. */
+export const deleteMods = (ids: number[]) =>
+  invoke<number>("delete_mods", { ids });
+
+/** Which of those IDs are on disk right now — polled to show progress. */
+export const modsInstalled = (ids: number[]) =>
+  invoke<number[]>("mods_installed", { ids });
 
 export const pruneSymlinks = () => invoke<number>("prune_symlinks");
 

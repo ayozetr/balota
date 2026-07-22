@@ -58,6 +58,20 @@ export interface ServerDetails {
   warning: string | null;
 }
 
+export interface ItemState {
+  id: number;
+  /** False means Steam does not track it: a leftover download. */
+  subscribed: boolean;
+  installed: boolean;
+}
+
+export interface ModActionResult {
+  count: number;
+  /** Steam took the files but not a subscription — no auto-updates. */
+  downloadedOnly: boolean;
+  warning: string | null;
+}
+
 export interface ListStatus {
   total: number;
   fetchedAt: number;

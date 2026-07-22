@@ -1,3 +1,6 @@
+[workspace]
+members = ["workshop-helper"]
+
 [package]
 name = "balota"
 version = "0.2.0"
