@@ -20,6 +20,9 @@ import ModsTab from "./components/ModsTab";
 import ServerModal from "./components/ServerModal";
 import ServerTable from "./components/ServerTable";
 import SettingsTab from "./components/SettingsTab";
+import WindowControls from "./components/WindowControls";
+import ResizeEdges from "./components/ResizeEdges";
+import { useMaximized } from "./useMaximized";
 import { formatNumber, timeAgo } from "./format";
 import * as api from "./api";
 import type {
@@ -70,7 +73,14 @@ export default function App() {
   const [sort, setSort] = useState<SortBy>("players");
   const [pageIndex, setPageIndex] = useState(0);
 
+  const maximized = useMaximized();
   const toastTimer = useRef<number>();
+
+  // The frame's corners and shadow are CSS, so the maximised state has to
+  // reach the stylesheet.
+  useEffect(() => {
+    document.documentElement.classList.toggle("maximized", maximized);
+  }, [maximized]);
 
   const notify = useCallback((message: string, kind: Toast["kind"] = "info") => {
     setToast({ message, kind });
@@ -288,6 +298,8 @@ export default function App() {
 
   return (
     <div className="app">
+      <ResizeEdges />
+
       <aside className="sidebar">
         <div className="brand">
           <img className="brand-mark" src={logo} alt="" width={44} height={44} />
@@ -334,7 +346,10 @@ export default function App() {
       </aside>
 
       <main className="main">
-        <header className="header">
+        {/* The header doubles as the title bar: dragging it moves the window.
+            Interactive children keep their own clicks, since the drag only
+            fires when the press lands on the region itself. */}
+        <header className="header" data-tauri-drag-region>
           <label className="field">
             In-game name
             <input
@@ -373,6 +388,8 @@ export default function App() {
             <Terminal size={13} />
             Direct connect
           </button>
+
+          <WindowControls />
         </header>
 
         <div className="content">
