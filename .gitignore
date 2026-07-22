@@ -1,32 +1,48 @@
-# Node & Dependencies
+# Node
 node_modules/
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 
-# Build Outputs
+# Build output
 dist/
-dist-electron/
 out/
 build/
 *.AppImage
 *.deb
 *.rpm
 
-# Tauri & Rust Build Artifacts
+# Rust / Tauri
+# Cargo.lock is committed on purpose: this crate builds a binary, so pinned
+# dependency versions are what makes a build reproducible.
 src-tauri/target/
-src-tauri/Cargo.lock
+src-tauri/gen/
+src-tauri/binaries/
+*.rs.bk
 
-# Operating System & IDE Files
-.DS_Store
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Environment & Logs
+# Signing keys and secrets. The Tauri updater's private key must never end up
+# in a commit — it is the one thing that cannot be rotated quietly, since every
+# installed client trusts it.
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
 .env
-.env.local
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.sw?
+.claude/settings.local.json
+
+# Local
+*.local
 *.log
 .cache/
+coverage/

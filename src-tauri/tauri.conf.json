@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ApexDZ Launcher",
-  "version": "0.1.0",
-  "identifier": "com.apexdz.launcher",
+  "productName": "Balota",
+  "version": "0.2.0",
+  "identifier": "io.github.ayozetr.Balota",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,23 +12,30 @@
   "app": {
     "windows": [
       {
-        "title": "ApexDZ - DayZ Linux Launcher",
-        "width": 1280,
-        "height": 800,
+        "label": "main",
+        "title": "Balota — DayZ Linux Launcher",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 1000,
+        "minHeight": 640,
         "resizable": true,
-        "fullscreen": false
+        "backgroundColor": "#0b0f19"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["appimage", "deb"],
+    "category": "Game",
+    "shortDescription": "Navegador de servidores de DayZ para Linux",
+    "longDescription": "Balota lista los servidores de DayZ, resuelve los mods que exige cada uno y lanza el juego a través de Steam con los enlaces simbólicos que Proton necesita.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
+      "icons/128x128@2x.png",
       "icons/icon.png"
     ]
   }

@@ -1,56 +1,127 @@
+/** Mirrors the payloads defined in `src-tauri/src`. */
+
 export interface SteamEnvironment {
-  is_flatpak: boolean;
-  steam_root: string;
-  dayz_dir: string;
-  workshop_dir: string;
-  dayz_found: boolean;
+  steamFound: boolean;
+  isFlatpak: boolean;
+  steamRunning: boolean;
+  steamRoot: string | null;
+  libraries: string[];
+  dayzDir: string | null;
+  workshopDir: string | null;
+  dayzFound: boolean;
+  notes: string[];
 }
 
-export interface InstalledModInfo {
-  id: string;
+export interface InstalledMod {
+  id: number;
   name: string;
   path: string;
-  size_bytes: number;
+  sizeBytes: number;
 }
 
-export interface DzsaModInfo {
-  steamWorkshopId: string;
-  name: string;
-}
-
-export interface DzsaQueryResult {
-  name?: string;
-  map?: string;
-  players?: number;
-  max_players?: number;
-  mods?: DzsaModInfo[];
-  is_modded?: boolean;
-}
-
-export interface ServerItem {
+export interface ServerRow {
   id: string;
   name: string;
   ip: string;
-  port: number;
-  query_port: number;
+  gamePort: number;
+  queryPort: number;
   map: string;
   players: number;
-  max_players: number;
-  ping: number;
-  is_modded: boolean;
-  mods_count: number;
-  is_favorite?: boolean;
-  is_3pp?: boolean;
-  has_password?: boolean;
-  mods?: DzsaModInfo[];
+  maxPlayers: number;
+  modCount: number;
+  firstPersonOnly: boolean;
+  password: boolean;
+  battleEye: boolean;
+  version: string;
+  time: string | null;
 }
 
-export interface AppUserConfig {
-  player_name: string;
-  is_flatpak: boolean;
-  custom_steam_root?: string;
-  use_gamemode: boolean;
-  use_mangohud: boolean;
-  custom_launch_params: string;
+export interface ServerPage {
+  items: ServerRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ModStatus {
+  id: number;
+  name: string;
+  installed: boolean;
+}
+
+export interface ServerDetails {
+  server: ServerRow;
+  connect: string;
+  mods: ModStatus[];
+  missingCount: number;
+  live: boolean;
+  warning: string | null;
+}
+
+export interface ListStatus {
+  total: number;
+  fetchedAt: number;
+  fromCache: boolean;
+}
+
+export interface MapCount {
+  map: string;
+  servers: number;
+}
+
+export interface PingResult {
+  id: string;
+  online: boolean;
+  pingMs: number | null;
+  players: number | null;
+  maxPlayers: number | null;
+}
+
+export interface HistoryEntry {
+  id: string;
+  name: string;
+  map: string;
+  lastPlayed: number;
+  timesPlayed: number;
+}
+
+export interface AppConfig {
+  playerName: string;
+  customSteamRoot: string | null;
+  extraLaunchArgs: string;
   favorites: string[];
+  history: HistoryEntry[];
+}
+
+export type ModFilter = "all" | "modded" | "vanilla";
+export type Perspective = "all" | "fpp" | "tpp";
+export type SortBy = "players" | "name" | "map";
+
+export interface ServerFilter {
+  search: string;
+  map: string | null;
+  mods: ModFilter;
+  perspective: Perspective;
+  hideEmpty: boolean;
+  hideFull: boolean;
+  hidePassword: boolean;
+  onlyFavorites: boolean;
+  favorites: string[];
+  sort: SortBy;
+  page: number;
+  pageSize: number;
+}
+
+export interface LaunchRequest {
+  connect?: string;
+  modIds: number[];
+  playerName?: string;
+  extraArgs?: string;
+  dryRun?: boolean;
+}
+
+export interface LaunchOutcome {
+  command: string;
+  linkedMods: string[];
+  missingMods: number[];
 }

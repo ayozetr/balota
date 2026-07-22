@@ -1,14 +1,15 @@
 {
-  "name": "apexdz-launcher-ui",
+  "name": "balota",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "start": "electron electron/main.cjs"
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "app:build": "APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1 tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -17,10 +18,10 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^34.2.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
   }
