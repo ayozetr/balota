@@ -62,8 +62,15 @@ function send(key: string) {
   target.dispatchEvent(new KeyboardEvent("keyup", init));
 }
 
-export function useGamepad(): string | null {
+export interface PadState {
+  id: string | null;
+  /** Button indices held right now, for the on-screen diagram. */
+  pressed: number[];
+}
+
+export function useGamepad(): PadState {
   const [padId, setPadId] = useState<string | null>(null);
+  const [pressedButtons, setPressedButtons] = useState<number[]>([]);
 
   useEffect(() => {
     if (!("getGamepads" in navigator)) return;
@@ -79,12 +86,16 @@ export function useGamepad(): string | null {
       const now = performance.now();
       const pressed = new Set<string>();
 
+      const down: number[] = [];
+
       for (const pad of pads) {
         if (!pad) continue;
 
         pad.buttons.forEach((button, index) => {
+          if (!button.pressed) return;
+          down.push(index);
           const key = BUTTONS[index];
-          if (key && button.pressed) pressed.add(key);
+          if (key) pressed.add(key);
         });
 
         pad.axes.forEach((value, index) => {
@@ -113,6 +124,13 @@ export function useGamepad(): string | null {
         if (!pressed.has(key)) held.delete(key);
       }
 
+      // Only re-render when the set actually changes: this runs every frame.
+      setPressedButtons((previous) =>
+        previous.length === down.length && previous.every((b, i) => b === down[i])
+          ? previous
+          : down,
+      );
+
       frame = requestAnimationFrame(poll);
     };
 
@@ -126,5 +144,5 @@ export function useGamepad(): string | null {
     };
   }, []);
 
-  return padId;
+  return { id: padId, pressed: pressedButtons };
 }

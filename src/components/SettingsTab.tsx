@@ -25,6 +25,7 @@ interface Props {
   onRedetect: () => void;
   onNotice: (message: string) => void;
   padId: string | null;
+  padPressed: number[];
 }
 
 export default function SettingsTab({
@@ -34,6 +35,7 @@ export default function SettingsTab({
   onRedetect,
   onNotice,
   padId,
+  padPressed,
 }: Props) {
   const [steamRoot, setSteamRoot] = useState(config.customSteamRoot ?? "");
 
@@ -177,7 +179,11 @@ export default function SettingsTab({
         </div>
       </section>
 
-      <ControllerHelp padId={padId} steamDeck={env?.steamDeck ?? null} />
+      <ControllerHelp
+        padId={padId}
+        pressed={padPressed}
+        steamDeck={env?.steamDeck ?? null}
+      />
 
       <section className="section">
         <h3 className="section-title">About</h3>

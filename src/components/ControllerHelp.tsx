@@ -1,64 +1,55 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { Gamepad2 } from "lucide-react";
+import PadBody, { Glyph } from "./PadDiagram";
+import type { Family } from "./PadDiagram";
 
 /**
- * Button labels differ by hardware: the same physical button is A on an Xbox
- * pad, B on a Nintendo one and ✕ on a PlayStation one. Showing "A opens" to
- * someone holding a Pro Controller sends them to the wrong button, so the
- * labels follow whatever is plugged in.
+ * Which hardware is in the player's hands, so the artwork and the button
+ * glyphs match it. The same physical button is A on an Xbox pad, B on a
+ * Nintendo one and ✕ on a PlayStation one, so guessing wrong sends people to
+ * the wrong button.
  */
-type Family = "nintendo" | "playstation" | "xbox" | "deck" | "generic";
-
 function family(id: string, steamDeck: string | null): Family {
   if (steamDeck) return "deck";
   const s = id.toLowerCase();
   if (s.includes("057e") || s.includes("nintendo") || s.includes("switch"))
     return "nintendo";
-  if (s.includes("054c") || s.includes("dualsense") || s.includes("dualshock") ||
-      s.includes("playstation") || s.includes("sony"))
+  if (
+    s.includes("054c") ||
+    s.includes("dualsense") ||
+    s.includes("dualshock") ||
+    s.includes("playstation") ||
+    s.includes("sony")
+  )
     return "playstation";
   if (s.includes("045e") || s.includes("xbox") || s.includes("microsoft"))
     return "xbox";
+  if (s.includes("28de") || s.includes("valve") || s.includes("steam"))
+    return "deck";
   return "generic";
 }
 
-/** Face buttons, in Gamepad API index order: south, east, west, north. */
-const FACE: Record<Family, [string, string, string, string]> = {
-  //        south  east   west   north
-  nintendo: ["B", "A", "Y", "X"],
-  playstation: ["✕", "○", "□", "△"],
-  xbox: ["A", "B", "X", "Y"],
-  deck: ["A", "B", "X", "Y"],
-  generic: ["south", "east", "west", "north"],
-};
+/** Gamepad API button indices, paired with what Balota does with them. */
+const ACTIONS: Array<{ slot: string; index: number | null; does: string }> = [
+  { slot: "dpad", index: null, does: "Move through the list" },
+  { slot: "south", index: 0, does: "Open the selected server" },
+  { slot: "east", index: 1, does: "Back, or close a dialog" },
+  { slot: "west", index: 2, does: "Toggle favourite" },
+  { slot: "north", index: 3, does: "Join straight away" },
+  { slot: "l", index: 4, does: "Previous page" },
+  { slot: "r", index: 5, does: "Next page" },
+];
 
-const SHOULDER: Record<Family, [string, string]> = {
-  nintendo: ["L", "R"],
-  playstation: ["L1", "R1"],
-  xbox: ["LB", "RB"],
-  deck: ["L1", "R1"],
-  generic: ["L1", "R1"],
-};
+const DPAD_BUTTONS = [12, 13, 14, 15];
 
 interface Props {
   padId: string | null;
+  pressed: number[];
   steamDeck: string | null;
 }
 
-export default function ControllerHelp({ padId, steamDeck }: Props) {
+export default function ControllerHelp({ padId, pressed, steamDeck }: Props) {
   const kind = family(padId ?? "", steamDeck);
-  const [south, east, west, north] = FACE[kind];
-  const [l1, r1] = SHOULDER[kind];
-
-  const rows: Array<[string, string]> = [
-    ["D-pad / left stick", "Move"],
-    [south, "Open the selected server"],
-    [east, "Back, or close a dialog"],
-    [west, "Toggle favourite"],
-    [north, "Join straight away"],
-    [`${l1} / ${r1}`, "Previous / next page"],
-  ];
-
   const name = steamDeck ?? padId?.replace(/\s*\(Vendor:.*$/i, "").trim();
 
   return (
@@ -71,23 +62,36 @@ export default function ControllerHelp({ padId, steamDeck }: Props) {
       <p className="hint">
         {name ? (
           <>
-            Detected: <strong>{name}</strong>.
+            Detected: <strong>{name}</strong>. Press a button and it lights up
+            below.
           </>
         ) : (
           "No controller detected. Plug one in and it will appear here."
         )}{" "}
         In Steam Deck's Game Mode, Steam Input turns the controller into
-        keystrokes before Balota ever sees it, so the mapping below is handled by
-        Steam's own layout there.
+        keystrokes before Balota sees it, so there the mapping comes from
+        Steam's own layout.
       </p>
 
-      <div className="pad-map">
-        {rows.map(([button, does]) => (
-          <div className="pad-row" key={button}>
-            <span className="pad-key">{button}</span>
-            <span>{does}</span>
-          </div>
-        ))}
+      <div className="pad-layout">
+        <PadBody family={kind} />
+
+        <div className="pad-map">
+          {ACTIONS.map(({ slot, index, does }) => (
+            <div className="pad-row" key={slot}>
+              <Glyph
+                family={kind}
+                slot={slot}
+                active={
+                  index === null
+                    ? pressed.some((b) => DPAD_BUTTONS.includes(b))
+                    : pressed.includes(index)
+                }
+              />
+              <span>{does}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );

@@ -82,7 +82,7 @@ export default function App() {
   const [pageIndex, setPageIndex] = useState(0);
 
   const maximized = useMaximized();
-  const padId = useGamepad();
+  const pad = useGamepad();
   useSpatialNav();
   const toastTimer = useRef<number>();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -383,7 +383,7 @@ export default function App() {
             <span>Servers</span>
             <span>{status ? formatNumber(status.total) : "…"}</span>
           </div>
-          {(padId || env?.steamDeck) && (
+          {(pad.id || env?.steamDeck) && (
             <div className="status-row">
               <span>Gamepad</span>
               <span style={{ color: "var(--green)" }}>
@@ -513,7 +513,8 @@ export default function App() {
                 notify("Steam detection refreshed.");
               }}
               onNotice={notify}
-              padId={padId}
+              padId={pad.id}
+              padPressed={pad.pressed}
             />
           )}
         </div>
