@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Client for the public dayzsalauncher.com API.
 //!
 //! Two endpoints:

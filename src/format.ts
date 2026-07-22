@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 export function formatBytes(bytes: number): string {
   if (!bytes) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];

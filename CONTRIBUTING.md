@@ -91,6 +91,22 @@ logic.
 If you touch any of those, the test comes with the change. A wrong symlink name or a
 misparsed A2S packet fails silently at runtime — that is exactly why they are pinned.
 
+## Licensing
+
+Balota is GPL-3.0-or-later with an additional permission for the Steamworks SDK. By
+sending a pull request you agree to your work being released under those terms.
+
+New source files carry the SPDX header the rest of the tree uses:
+
+```
+// SPDX-License-Identifier: GPL-3.0-or-later
+```
+
+Dependencies must be GPL-compatible. Every one currently in the tree is permissive
+(MIT, Apache-2.0, BSD, ISC, MPL-2.0); adding a copyleft-incompatible or proprietary one
+needs a good reason and, most likely, an extra permission in LICENSE — the Steamworks
+SDK being the existing example. Refresh `docs/THIRD-PARTY.md` when dependencies change.
+
 ## Conventions
 
 - Code, comments, UI strings and docs in English.

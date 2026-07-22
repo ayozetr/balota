@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /** Typed wrappers around the Tauri commands. */
 
 import { invoke } from "@tauri-apps/api/core";

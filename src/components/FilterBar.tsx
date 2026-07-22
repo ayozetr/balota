@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { Search } from "lucide-react";
 import type { MapCount, ModFilter, Perspective } from "../types";
 import { formatNumber } from "../format";

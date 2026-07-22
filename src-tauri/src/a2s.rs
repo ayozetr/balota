@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! A2S_INFO queries (Valve's UDP protocol) to measure real latency and refresh
 //! player counts.
 //!

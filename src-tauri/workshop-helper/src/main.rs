@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Subscribes and unsubscribes Steam Workshop items on behalf of Balota.
 //!
 //! This lives in its own short-lived process on purpose. Initialising the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Persistent settings, stored in `~/.config/balota/config.json`.
 
 use serde::{Deserialize, Serialize};

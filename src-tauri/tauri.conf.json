@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Balota — DayZ Linux Launcher",
+        "title": "Balota \u2014 DayZ Linux Launcher",
         "width": 1360,
         "height": 860,
         "minWidth": 1000,
@@ -30,16 +30,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb"],
-    "externalBin": ["binaries/balota-workshop"],
+    "targets": [
+      "appimage",
+      "deb"
+    ],
+    "externalBin": [
+      "binaries/balota-workshop"
+    ],
     "category": "Game",
-    "shortDescription": "Navegador de servidores de DayZ para Linux",
-    "longDescription": "Balota lista los servidores de DayZ, resuelve los mods que exige cada uno y lanza el juego a través de Steam con los enlaces simbólicos que Proton necesita.",
+    "shortDescription": "DayZ server browser and mod manager for Linux",
+    "longDescription": "Balota lists every DayZ server, resolves the mods each one requires, subscribes to them through Steam and launches the game with the symlinks Proton needs to load them.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.png"
-    ]
+    ],
+    "licenseFile": "../LICENSE",
+    "copyright": "Copyright \u00a9 2026 Ayoze Torres. GPL-3.0-or-later with a Steamworks SDK exception.",
+    "publisher": "Ayoze Torres",
+    "homepage": "https://github.com/ayozetr/balota"
   }
 }

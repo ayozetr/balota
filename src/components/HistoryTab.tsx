@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { History, Play } from "lucide-react";
 import type { AppConfig } from "../types";
 import { timeAgo } from "../format";

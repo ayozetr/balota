@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { useState } from "react";
 import {
   AlertTriangle,
@@ -7,10 +8,11 @@ import {
   Github,
   Heart,
   RefreshCw,
+  Scale,
 } from "lucide-react";
 import type { AppConfig, SteamEnvironment } from "../types";
 import { copyToClipboard, openSteamProperties, openUrl } from "../api";
-import { KOFI_URL, REPO_URL } from "../links";
+import { KOFI_URL, LICENSE_URL, REPO_URL } from "../links";
 
 const LAUNCH_OPTIONS = "gamemoderun mangohud %command%";
 const APP_VERSION = "0.2.0";
@@ -174,9 +176,13 @@ export default function SettingsTab({
 
       <section className="section">
         <h3 className="section-title">About</h3>
+        {/* GPLv3 §5(d): an interactive program must show this notice. */}
         <p className="hint">
-          Balota {APP_VERSION} · MIT licence · © 2026 Ayoze Torres. Server data
-          comes from the public dayzsalauncher.com API.
+          Balota {APP_VERSION} · Copyright © 2026 Ayoze Torres.
+          <br />
+          This program comes with ABSOLUTELY NO WARRANTY. It is free software, and you
+          are welcome to redistribute it under the terms of the GNU General Public
+          License v3 or later, with an additional permission for the Steamworks SDK.
         </p>
 
         <div style={{ display: "flex", gap: 8 }}>
@@ -187,6 +193,10 @@ export default function SettingsTab({
           <button className="btn btn-sm" onClick={() => openUrl(KOFI_URL)}>
             <Heart size={13} />
             Support on Ko-fi
+          </button>
+          <button className="btn btn-sm" onClick={() => openUrl(LICENSE_URL)}>
+            <Scale size={13} />
+            Licence
           </button>
         </div>
 

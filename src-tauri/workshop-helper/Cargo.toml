@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "Balota's Steam Workshop helper: subscribes and unsubscribes mods"
 edition = "2021"
 rust-version = "1.77"
-license = "MIT"
+license = "GPL-3.0-or-later WITH Steamworks-exception"
 
 [dependencies]
 steamworks = "0.13"

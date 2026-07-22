@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! In-memory store for the master server list, with disk cache, filtering and
 //! pagination.
 //!

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Keeps an extra console from opening on Windows. We only support Linux, but
 // the attribute is harmless.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]

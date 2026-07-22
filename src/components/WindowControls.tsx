@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 import { Minus, Square, Copy, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useMaximized } from "../useMaximized";

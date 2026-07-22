@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Steam installation discovery, mod symlink management and game launching.
 
 use serde::{Deserialize, Serialize};

@@ -148,7 +148,17 @@ respective owners.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). © 2026 Ayoze Torres.
+GNU General Public License v3.0 or later, with an additional permission under section 7
+for linking against the Steamworks SDK — see [LICENSE](LICENSE). Copyright © 2026 Ayoze
+Torres.
+
+In short: the source stays open. Anyone may use, study, modify and redistribute Balota,
+and any distributed derivative has to ship its source under the same terms. The extra
+permission exists so the app can talk to Steam through Valve's proprietary SDK, which
+the GPL alone would not allow.
+
+Third-party dependencies and their licences are listed in
+[docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
 
 ---
 

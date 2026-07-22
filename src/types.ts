@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /** Mirrors the payloads defined in `src-tauri/src`. */
 
 export interface SteamEnvironment {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 //! Minimal parser for Valve's KeyValues format (VDF).
 //!
 //! Used to read `libraryfolders.vdf` (Steam libraries spread across several
