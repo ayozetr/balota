@@ -78,6 +78,20 @@ button {
   background: none;
 }
 
+/* Keyboard focus has to be obvious. In Steam Deck's Game Mode the controller
+   arrives as keyboard input — D-pad as arrows, A as Enter — so this ring is
+   the only thing telling the player where they are. */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.row-item:focus-visible {
+  outline-offset: -2px;
+  background: var(--bg-hover);
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;

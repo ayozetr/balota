@@ -17,8 +17,10 @@ launcher: get into a modded server without fighting the tooling.
 
 ## After that
 
-- **Gamepad navigation** for Steam Deck Game Mode: focus ring, D-pad, A/B. Balota is
-  usable there today, but only with the trackpad.
+- **Steam Deck**: keyboard navigation is in (see below), so a controller already drives
+  the app through Steam Input. Still missing: a Gamepad API path for when the raw
+  controller does reach the page, on-screen button hints, and a layout that survives
+  1280x800 at Game Mode's default scaling.
 - **Ping history per favourite**, so a bad night on a server is visible.
 - **Server notes**, a local free-text field per server. Nobody remembers which of five
   identically named servers was the good one.

@@ -105,7 +105,25 @@ yourself first).
   `steam -applaunch` only hands a request to the running Steam client, which spawns the
   game itself — wrapping that command wraps nothing. Settings shows the string to paste
   into Steam's own launch options, which is the one place that does work.
-- **No gamepad navigation yet**, so Steam Deck Game Mode is usable but not comfortable.
+- **Steam Deck is driven by keyboard, not the Gamepad API.** In Game Mode, Steam Input
+  hands desktop apps a controller as keyboard and mouse — D-pad as arrows, A as Enter,
+  B as Escape — so the whole interface is keyboard-navigable rather than reading the
+  controller directly.
+
+  | Key | Does |
+  | --- | --- |
+  | `↑` `↓` | Move through the server list |
+  | `Enter` | Open the selected server |
+  | `J` | Join it straight away |
+  | `F` | Toggle favourite |
+  | `Home` `End` | First / last server on the page |
+  | `Page Up` `Page Down` | Previous / next page |
+  | `/` | Jump to the search box |
+  | `F5` | Refresh the server list |
+  | `Esc` | Close a dialog, or leave a text field |
+
+  Tab moves between regions rather than through every row: the list is one stop, and
+  the arrows take over inside it.
 
 ## Troubleshooting
 

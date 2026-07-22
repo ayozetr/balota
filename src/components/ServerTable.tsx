@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import { useEffect, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -56,6 +57,60 @@ export default function ServerTable({
         })
       : rows;
 
+  const [focusIndex, setFocusIndex] = useState(0);
+
+  // Keep the roving index inside the list when the page changes under it.
+  useEffect(() => {
+    setFocusIndex((i) => Math.min(i, Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  function focusRow(container: HTMLElement, index: number) {
+    const rows = Array.from(
+      container.querySelectorAll<HTMLElement>(".row-item"),
+    );
+    const row = rows[Math.max(0, Math.min(rows.length - 1, index))];
+    row?.focus();
+    row?.scrollIntoView({ block: "nearest" });
+  }
+
+  /** Arrow keys move, Enter opens, and the row's own buttons get a letter
+   *  each, since they are out of the tab order. */
+  function move(e: React.KeyboardEvent, index: number, server: ServerRow) {
+    const list = e.currentTarget.parentElement;
+    if (!list) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+      case "ArrowUp":
+        e.preventDefault();
+        focusRow(list as HTMLElement, index + (e.key === "ArrowDown" ? 1 : -1));
+        break;
+      case "Home":
+        e.preventDefault();
+        focusRow(list as HTMLElement, 0);
+        break;
+      case "End":
+        e.preventDefault();
+        focusRow(list as HTMLElement, items.length - 1);
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        onSelect(server);
+        break;
+      case "f":
+      case "F":
+        e.preventDefault();
+        onToggleFavorite(server.id);
+        break;
+      case "j":
+      case "J":
+        e.preventDefault();
+        onJoin(server);
+        break;
+    }
+  }
+
   const total = page?.total ?? 0;
   const pageSize = page?.pageSize ?? 50;
   const current = page?.page ?? 0;
@@ -97,7 +152,7 @@ export default function ServerTable({
             {emptyMessage}
           </div>
         ) : (
-          items.map((server) => {
+          items.map((server, index) => {
             const ping = pings[server.id];
             const isFavorite = favorites.includes(server.id);
 
@@ -106,9 +161,18 @@ export default function ServerTable({
                 key={server.id}
                 className={`row row-item${selectedId === server.id ? " selected" : ""}`}
                 onClick={() => onSelect(server)}
+                role="button"
+                aria-label={`${server.name}, ${server.players} of ${server.maxPlayers} players`}
+                // Roving tabindex: the list is a single Tab stop. Making every
+                // row tabbable would put 50 rows and their buttons in the tab
+                // order, so reaching the pager would take 150 presses.
+                tabIndex={index === focusIndex ? 0 : -1}
+                onFocus={() => setFocusIndex(index)}
+                onKeyDown={(e) => move(e, index, server)}
               >
                 <button
                   className={`icon-btn${isFavorite ? " is-favorite" : ""}`}
+                  tabIndex={-1}
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleFavorite(server.id);
@@ -173,6 +237,7 @@ export default function ServerTable({
 
                 <button
                   className="btn btn-primary btn-sm"
+                  tabIndex={-1}
                   onClick={(e) => {
                     e.stopPropagation();
                     onJoin(server);
