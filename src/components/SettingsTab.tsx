@@ -13,6 +13,7 @@ import {
 import type { AppConfig, SteamEnvironment } from "../types";
 import { copyToClipboard, openSteamProperties, openUrl } from "../api";
 import { KOFI_URL, LICENSE_URL, REPO_URL } from "../links";
+import ControllerHelp from "./ControllerHelp";
 
 const LAUNCH_OPTIONS = "gamemoderun mangohud %command%";
 const APP_VERSION = "0.2.0";
@@ -23,6 +24,7 @@ interface Props {
   onChange: (config: AppConfig) => void;
   onRedetect: () => void;
   onNotice: (message: string) => void;
+  padId: string | null;
 }
 
 export default function SettingsTab({
@@ -31,6 +33,7 @@ export default function SettingsTab({
   onChange,
   onRedetect,
   onNotice,
+  padId,
 }: Props) {
   const [steamRoot, setSteamRoot] = useState(config.customSteamRoot ?? "");
 
@@ -173,6 +176,8 @@ export default function SettingsTab({
           </button>
         </div>
       </section>
+
+      <ControllerHelp padId={padId} steamDeck={env?.steamDeck ?? null} />
 
       <section className="section">
         <h3 className="section-title">About</h3>

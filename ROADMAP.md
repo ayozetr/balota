@@ -17,10 +17,9 @@ launcher: get into a modded server without fighting the tooling.
 
 ## After that
 
-- **Steam Deck**: keyboard navigation is in (see below), so a controller already drives
-  the app through Steam Input. Still missing: a Gamepad API path for when the raw
-  controller does reach the page, on-screen button hints, and a layout that survives
-  1280x800 at Game Mode's default scaling.
+- **Steam Deck**: keyboard and controller navigation are both in. Still missing:
+  on-screen button hints, and a layout that survives 1280x800 at Game Mode's default
+  scaling.
 - **Ping history per favourite**, so a bad night on a server is visible.
 - **Server notes**, a local free-text field per server. Nobody remembers which of five
   identically named servers was the good one.

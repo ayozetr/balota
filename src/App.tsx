@@ -28,6 +28,8 @@ import ResizeEdges from "./components/ResizeEdges";
 import { useMaximized } from "./useMaximized";
 import { useShortcuts } from "./useShortcuts";
 import { useFocusTrap } from "./useFocusTrap";
+import { useGamepad } from "./useGamepad";
+import { useSpatialNav } from "./useSpatialNav";
 import { formatNumber, timeAgo } from "./format";
 import { KOFI_URL, REPO_URL } from "./links";
 import * as api from "./api";
@@ -80,6 +82,8 @@ export default function App() {
   const [pageIndex, setPageIndex] = useState(0);
 
   const maximized = useMaximized();
+  const padId = useGamepad();
+  useSpatialNav();
   const toastTimer = useRef<number>();
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -379,6 +383,14 @@ export default function App() {
             <span>Servers</span>
             <span>{status ? formatNumber(status.total) : "…"}</span>
           </div>
+          {(padId || env?.steamDeck) && (
+            <div className="status-row">
+              <span>Gamepad</span>
+              <span style={{ color: "var(--green)" }}>
+                {env?.steamDeck ? "Deck" : "connected"}
+              </span>
+            </div>
+          )}
         </div>
 
       </aside>
@@ -501,6 +513,7 @@ export default function App() {
                 notify("Steam detection refreshed.");
               }}
               onNotice={notify}
+              padId={padId}
             />
           )}
         </div>

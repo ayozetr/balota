@@ -125,6 +125,10 @@ yourself first).
   Tab moves between regions rather than through every row: the list is one stop, and
   the arrows take over inside it.
 
+  A controller plugged straight into the machine works too — the d-pad and left stick
+  move, A opens, B goes back, X favourites, Y joins, and the shoulder buttons page.
+  Balota shows "Gamepad: connected" in the sidebar when it can see one.
+
 ## Troubleshooting
 
 **Blank window, or `Gdk-Message: Error 71 dispatching to Wayland display`.**

@@ -10,6 +10,8 @@ export interface SteamEnvironment {
   dayzDir: string | null;
   workshopDir: string | null;
   dayzFound: boolean;
+  /** Set on a Steam Deck: "Steam Deck (LCD)" or "(OLED)". */
+  steamDeck: string | null;
   notes: string[];
 }
 
