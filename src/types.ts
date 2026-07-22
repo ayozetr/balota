@@ -110,6 +110,8 @@ export interface AppConfig {
 export type ModFilter = "all" | "modded" | "vanilla";
 export type Perspective = "all" | "fpp" | "tpp";
 export type SortBy = "players" | "name" | "map";
+/** Ping is measured client-side, so ordering by it never reaches the backend. */
+export type SortMode = SortBy | "ping";
 
 export interface ServerFilter {
   search: string;

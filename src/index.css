@@ -434,6 +434,17 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
+/* Inputs, selects and toggles each carry their own padding and font size, so
+   left alone they end up three different heights sitting side by side. One
+   fixed height lines the whole row up. */
+.filters input[type="text"],
+.filters select,
+.filters .toggle {
+  height: 34px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .search {
   position: relative;
   flex: 1;
@@ -452,6 +463,129 @@ input[type="checkbox"] {
 .search input {
   width: 100%;
   padding-left: 34px;
+}
+
+/* ---------------------------------------------------------------- select -- */
+
+.select {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.13s, background 0.13s;
+}
+
+.select-trigger:hover {
+  border-color: var(--border-strong);
+}
+
+.select-trigger.open,
+.select-trigger:focus-visible {
+  border-color: var(--blue);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.select-value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-arrow {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+
+.select-trigger.open .select-arrow {
+  transform: rotate(180deg);
+}
+
+.select-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  animation: select-in 0.11s ease-out;
+}
+
+/* Flipped when the row sits near the bottom of the window. */
+.select-menu.up {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+@keyframes select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.select-option.active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.select-option.selected {
+  color: #fff;
+  font-weight: 550;
+}
+
+.select-check {
+  flex-shrink: 0;
+  color: var(--red);
+  opacity: 0;
+}
+
+.select-option.selected .select-check {
+  opacity: 1;
+}
+
+.select-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-hint {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .toggle {
@@ -482,10 +616,21 @@ input[type="checkbox"] {
 
 .row {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 118px 88px 76px 92px 96px;
+  grid-template-columns: 38px minmax(0, 1fr) 118px 84px 78px 92px 96px;
   align-items: center;
   gap: 10px;
   padding: 0 16px;
+}
+
+/* Players and ping are numbers: right-aligned and tabular so the digits line
+   up down the column, header included. */
+.row > .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-head > .num {
+  justify-content: flex-end;
 }
 
 .row-head {

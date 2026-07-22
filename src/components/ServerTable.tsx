@@ -7,7 +7,7 @@ import {
   ServerOff,
   Star,
 } from "lucide-react";
-import type { PingResult, ServerPage, ServerRow, SortBy } from "../types";
+import type { PingResult, ServerPage, ServerRow, SortMode } from "../types";
 import { formatNumber, pingClass } from "../format";
 
 interface Props {
@@ -16,8 +16,8 @@ interface Props {
   favorites: string[];
   pings: Record<string, PingResult>;
   selectedId: string | null;
-  sort: SortBy;
-  onSort: (sort: SortBy) => void;
+  sort: SortMode;
+  onSort: (sort: SortMode) => void;
   onSelect: (server: ServerRow) => void;
   onToggleFavorite: (id: string) => void;
   onJoin: (server: ServerRow) => void;
@@ -39,7 +39,22 @@ export default function ServerTable({
   onPage,
   emptyMessage,
 }: Props) {
-  const items = page?.items ?? [];
+  const rows = page?.items ?? [];
+
+  // Ping is measured here rather than served by the API, so sorting by it can
+  // only order what has already been probed: this page. Unmeasured and
+  // unreachable servers sink to the bottom instead of pretending to be fast.
+  const items =
+    sort === "ping"
+      ? [...rows].sort((a, b) => {
+          const pa = pings[a.id];
+          const pb = pings[b.id];
+          const va = pa?.online ? (pa.pingMs ?? Infinity) : Infinity;
+          const vb = pb?.online ? (pb.pingMs ?? Infinity) : Infinity;
+          return va - vb || b.players - a.players;
+        })
+      : rows;
+
   const total = page?.total ?? 0;
   const pageSize = page?.pageSize ?? 50;
   const current = page?.page ?? 0;
@@ -55,10 +70,16 @@ export default function ServerTable({
         <button onClick={() => onSort("map")} title="Sort by map">
           Map {sort === "map" && "▾"}
         </button>
-        <button onClick={() => onSort("players")} title="Sort by players">
+        <button
+          className="num"
+          onClick={() => onSort("players")}
+          title="Sort by players"
+        >
           Players {sort === "players" && "▾"}
         </button>
-        <span>Ping</span>
+        <button className="num" onClick={() => onSort("ping")} title="Sort by ping">
+          Ping {sort === "ping" && "▾"}
+        </button>
         <span>Mods</span>
         <span />
       </div>
@@ -120,7 +141,7 @@ export default function ServerTable({
 
                 <div style={{ color: "var(--cyan)", fontSize: 12 }}>{server.map}</div>
 
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                <div className="num" style={{ fontSize: 12.5, fontWeight: 600 }}>
                   <span
                     style={{
                       color:
@@ -135,7 +156,7 @@ export default function ServerTable({
                 </div>
 
                 <div
-                  className={`${pingClass(ping?.pingMs)} mono`}
+                  className={`num mono ${pingClass(ping?.pingMs)}`}
                   style={{ fontSize: 12, fontWeight: 600 }}
                 >
                   {ping ? (ping.online ? `${ping.pingMs} ms` : "—") : "…"}
@@ -168,6 +189,7 @@ export default function ServerTable({
       <div className="pager">
         <span>
           {formatNumber(total)} server{total === 1 ? "" : "s"}
+          {sort === "ping" && " · sorted by ping on this page"}
           {loading && items.length > 0 && " · refreshing…"}
         </span>
 

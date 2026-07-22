@@ -35,7 +35,7 @@ import type {
   ServerDetails,
   ServerPage,
   ServerRow,
-  SortBy,
+  SortMode,
   SteamEnvironment,
 } from "./types";
 
@@ -70,7 +70,7 @@ export default function App() {
   const [hideEmpty, setHideEmpty] = useState(true);
   const [hideFull, setHideFull] = useState(false);
   const [hidePassword, setHidePassword] = useState(false);
-  const [sort, setSort] = useState<SortBy>("players");
+  const [sort, setSort] = useState<SortMode>("players");
   const [pageIndex, setPageIndex] = useState(0);
 
   const maximized = useMaximized();
@@ -156,7 +156,9 @@ export default function App() {
         hidePassword,
         onlyFavorites: tab === "favorites",
         favorites: favoritesKey ? favoritesKey.split(",") : [],
-        sort,
+        // The backend has no pings to sort by; that ordering happens in the
+        // table, over the rows it has actually probed.
+        sort: sort === "ping" ? "players" : sort,
         page: pageIndex,
         pageSize: PAGE_SIZE,
       })

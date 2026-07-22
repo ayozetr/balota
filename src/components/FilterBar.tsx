@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import type { MapCount, ModFilter, Perspective } from "../types";
 import { formatNumber } from "../format";
+import Select from "./Select";
 
 interface Props {
   search: string;
@@ -20,7 +21,28 @@ interface Props {
   onHidePassword: (value: boolean) => void;
 }
 
+const MOD_OPTIONS = [
+  { value: "all", label: "Modded & vanilla" },
+  { value: "modded", label: "Modded only" },
+  { value: "vanilla", label: "Vanilla only" },
+];
+
+const PERSPECTIVE_OPTIONS = [
+  { value: "all", label: "Any perspective" },
+  { value: "fpp", label: "1PP only" },
+  { value: "tpp", label: "3PP allowed" },
+];
+
 export default function FilterBar(props: Props) {
+  const mapOptions = [
+    { value: "", label: "All maps" },
+    ...props.maps.map((entry) => ({
+      value: entry.map,
+      label: entry.map,
+      hint: formatNumber(entry.servers),
+    })),
+  ];
+
   return (
     <div className="filters">
       <label className="search">
@@ -34,32 +56,29 @@ export default function FilterBar(props: Props) {
         />
       </label>
 
-      <select value={props.map} onChange={(e) => props.onMap(e.target.value)}>
-        <option value="">All maps</option>
-        {props.maps.map((entry) => (
-          <option key={entry.map} value={entry.map}>
-            {entry.map} ({formatNumber(entry.servers)})
-          </option>
-        ))}
-      </select>
+      <Select
+        label="Map"
+        value={props.map}
+        options={mapOptions}
+        onChange={props.onMap}
+        width={190}
+      />
 
-      <select
+      <Select
+        label="Mods"
         value={props.mods}
-        onChange={(e) => props.onMods(e.target.value as ModFilter)}
-      >
-        <option value="all">Modded &amp; vanilla</option>
-        <option value="modded">Modded only</option>
-        <option value="vanilla">Vanilla only</option>
-      </select>
+        options={MOD_OPTIONS}
+        onChange={(v) => props.onMods(v as ModFilter)}
+        width={168}
+      />
 
-      <select
+      <Select
+        label="Perspective"
         value={props.perspective}
-        onChange={(e) => props.onPerspective(e.target.value as Perspective)}
-      >
-        <option value="all">Any perspective</option>
-        <option value="fpp">1PP only</option>
-        <option value="tpp">3PP allowed</option>
-      </select>
+        options={PERSPECTIVE_OPTIONS}
+        onChange={(v) => props.onPerspective(v as Perspective)}
+        width={158}
+      />
 
       <label className="toggle">
         <input
