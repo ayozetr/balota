@@ -513,8 +513,7 @@ export default function App() {
                 notify("Steam detection refreshed.");
               }}
               onNotice={notify}
-              padId={pad.id}
-              padPressed={pad.pressed}
+              pad={pad}
             />
           )}
         </div>

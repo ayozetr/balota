@@ -2,6 +2,7 @@
 import { Gamepad2 } from "lucide-react";
 import PadBody, { Glyph } from "./PadDiagram";
 import type { Family } from "./PadDiagram";
+import type { PadState } from "../useGamepad";
 
 /**
  * Which hardware is in the player's hands, so the artwork and the button
@@ -43,14 +44,17 @@ const ACTIONS: Array<{ slot: string; index: number | null; does: string }> = [
 const DPAD_BUTTONS = [12, 13, 14, 15];
 
 interface Props {
-  padId: string | null;
-  pressed: number[];
+  pad: PadState;
   steamDeck: string | null;
 }
 
-export default function ControllerHelp({ padId, pressed, steamDeck }: Props) {
-  const kind = family(padId ?? "", steamDeck);
-  const name = steamDeck ?? padId?.replace(/\s*\(Vendor:.*$/i, "").trim();
+export default function ControllerHelp({ pad, steamDeck }: Props) {
+  const kind = family(pad.id ?? "", steamDeck);
+  const name = steamDeck ?? pad.id?.replace(/\s*\(Vendor:.*$/i, "").trim();
+  const connected = pad.id !== null;
+  // An empty mapping means the driver's own button order, which is not
+  // guaranteed to match the standard face-button indices the glyphs assume.
+  const nonStandard = connected && pad.mapping !== "standard";
 
   return (
     <section className="section">
@@ -66,12 +70,21 @@ export default function ControllerHelp({ padId, pressed, steamDeck }: Props) {
             below.
           </>
         ) : (
-          "No controller detected. Plug one in and it will appear here."
+          "No controller detected. Plug one in or pair it and it will appear here."
         )}{" "}
         In Steam Deck's Game Mode, Steam Input turns the controller into
         keystrokes before Balota sees it, so there the mapping comes from
         Steam's own layout.
       </p>
+
+      {nonStandard && (
+        <div className="note">
+          This controller reports a non-standard mapping, common for a Nintendo
+          pad over Bluetooth. Navigation still works, but the highlighted glyphs
+          may not match the physical button. The raw readout below shows what is
+          actually being pressed.
+        </div>
+      )}
 
       <div className="pad-layout">
         <PadBody family={kind} />
@@ -84,8 +97,8 @@ export default function ControllerHelp({ padId, pressed, steamDeck }: Props) {
                 slot={slot}
                 active={
                   index === null
-                    ? pressed.some((b) => DPAD_BUTTONS.includes(b))
-                    : pressed.includes(index)
+                    ? pad.pressed.some((b) => DPAD_BUTTONS.includes(b))
+                    : pad.pressed.includes(index)
                 }
               />
               <span>{does}</span>
@@ -93,6 +106,14 @@ export default function ControllerHelp({ padId, pressed, steamDeck }: Props) {
           ))}
         </div>
       </div>
+
+      {connected && (
+        <p className="hint mono" style={{ fontSize: 11 }}>
+          mapping: {pad.mapping || "non-standard"} · buttons: {pad.buttonCount} ·
+          pressed: [{pad.pressed.join(", ")}] · axes: [
+          {pad.axes.map((v) => v.toFixed(2)).join(", ")}]
+        </p>
+      )}
     </section>
   );
 }
