@@ -26,6 +26,9 @@ pub struct SteamEnvironment {
     pub dayz_dir: Option<String>,
     pub workshop_dir: Option<String>,
     pub dayz_found: bool,
+    /// Set when running on a Steam Deck, so the interface can label controller
+    /// buttons the way the hardware does.
+    pub steam_deck: Option<String>,
     /// Diagnostics shown in the Settings tab when something is missing.
     /// Without them, "DayZ not found" never tells the user where we looked.
     pub notes: Vec<String>,
@@ -188,6 +191,21 @@ fn flatpak_steam_running() -> bool {
         .unwrap_or(false)
 }
 
+/// Whether this machine is a Steam Deck, and which one.
+///
+/// Valve's DMI product name is the reliable signal: "Jupiter" for the LCD
+/// model, "Galileo" for the OLED. It decides which button labels the
+/// controller help should use, since the Deck's own layout is not the same as
+/// a generic pad's.
+pub fn steam_deck_model() -> Option<String> {
+    let name = fs::read_to_string("/sys/devices/virtual/dmi/id/product_name").ok()?;
+    match name.trim() {
+        "Jupiter" => Some("Steam Deck (LCD)".to_string()),
+        "Galileo" => Some("Steam Deck (OLED)".to_string()),
+        _ => None,
+    }
+}
+
 pub fn detect(custom_root: Option<&str>) -> SteamEnvironment {
     let mut notes = Vec::new();
     let roots = candidate_roots(custom_root);
@@ -208,6 +226,7 @@ pub fn detect(custom_root: Option<&str>) -> SteamEnvironment {
             dayz_dir: None,
             workshop_dir: None,
             dayz_found: false,
+            steam_deck: steam_deck_model(),
             notes,
         };
     }
@@ -296,6 +315,7 @@ pub fn detect(custom_root: Option<&str>) -> SteamEnvironment {
             .map(|p| p.to_string_lossy().to_string())
             .collect(),
         dayz_found: dayz.is_some(),
+        steam_deck: steam_deck_model(),
         dayz_dir: dayz.map(|p| p.to_string_lossy().to_string()),
         workshop_dir: workshop.map(|p| p.to_string_lossy().to_string()),
         notes,
@@ -933,6 +953,7 @@ mod tests {
             dayz_dir: None,
             workshop_dir: None,
             dayz_found: false,
+            steam_deck: None,
             notes: Vec::new(),
         };
         let helper = bundled.join("balota-workshop");

@@ -83,6 +83,16 @@ permission in LICENSE exists to allow.
 | serde | MIT OR Apache-2.0 | Serialisation |
 | steamworks (Noxime) | MIT OR Apache-2.0 | Steamworks SDK bindings |
 
+## Artwork
+
+Controller silhouettes and button glyphs come from
+[Kenney's Input Prompts](https://kenney.nl/assets/input-prompts), released under
+**CC0 1.0** (public domain). CC0 asks for nothing in return, but credit is cheap and
+Kenney's work saved this project from four hand-drawn approximations. The files live in
+`src/assets/controllers/`, recoloured to `currentColor` so the interface can theme them.
+
+The Balota logo is original work by the author and is covered by the project licence.
+
 ## Services
 
 Server data comes from the public API at dayzsalauncher.com. Balota is not affiliated

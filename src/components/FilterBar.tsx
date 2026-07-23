@@ -7,6 +7,8 @@ import Select from "./Select";
 interface Props {
   search: string;
   onSearch: (value: string) => void;
+  /** Lets the "/" shortcut put the caret here. */
+  searchRef?: React.RefObject<HTMLInputElement>;
   maps: MapCount[];
   map: string;
   onMap: (value: string) => void;
@@ -49,6 +51,7 @@ export default function FilterBar(props: Props) {
       <label className="search">
         <Search size={15} />
         <input
+          ref={props.searchRef}
           type="text"
           placeholder="Search by name, IP or map…"
           value={props.search}

@@ -26,6 +26,10 @@ import SettingsTab from "./components/SettingsTab";
 import WindowControls from "./components/WindowControls";
 import ResizeEdges from "./components/ResizeEdges";
 import { useMaximized } from "./useMaximized";
+import { useShortcuts } from "./useShortcuts";
+import { useFocusTrap } from "./useFocusTrap";
+import { useGamepad } from "./useGamepad";
+import { useSpatialNav } from "./useSpatialNav";
 import { formatNumber, timeAgo } from "./format";
 import { KOFI_URL, REPO_URL } from "./links";
 import * as api from "./api";
@@ -78,13 +82,26 @@ export default function App() {
   const [pageIndex, setPageIndex] = useState(0);
 
   const maximized = useMaximized();
+  const pad = useGamepad();
+  useSpatialNav();
   const toastTimer = useRef<number>();
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const lastPage = page ? Math.max(0, Math.ceil(page.total / page.pageSize) - 1) : 0;
+  useShortcuts({
+    onSearch: () => searchRef.current?.focus(),
+    onPrevPage: () => setPageIndex((i) => Math.max(0, i - 1)),
+    onNextPage: () => setPageIndex((i) => Math.min(lastPage, i + 1)),
+    onRefresh: () => void loadListRef.current?.(true),
+  });
 
   // The frame's corners and shadow are CSS, so the maximised state has to
   // reach the stylesheet.
   useEffect(() => {
     document.documentElement.classList.toggle("maximized", maximized);
   }, [maximized]);
+
+  const loadListRef = useRef<(force: boolean) => Promise<void>>();
 
   const notify = useCallback((message: string, kind: Toast["kind"] = "info") => {
     setToast({ message, kind });
@@ -108,6 +125,7 @@ export default function App() {
     },
     [notify],
   );
+  loadListRef.current = loadList;
 
   useEffect(() => {
     (async () => {
@@ -365,6 +383,14 @@ export default function App() {
             <span>Servers</span>
             <span>{status ? formatNumber(status.total) : "…"}</span>
           </div>
+          {(pad.id || env?.steamDeck) && (
+            <div className="status-row">
+              <span>Gamepad</span>
+              <span style={{ color: "var(--green)" }}>
+                {env?.steamDeck ? "Deck" : "connected"}
+              </span>
+            </div>
+          )}
         </div>
 
       </aside>
@@ -432,6 +458,7 @@ export default function App() {
               <FilterBar
                 search={search}
                 onSearch={setSearch}
+                searchRef={searchRef}
                 maps={maps}
                 map={map}
                 onMap={setMap}
@@ -486,6 +513,7 @@ export default function App() {
                 notify("Steam detection refreshed.");
               }}
               onNotice={notify}
+              pad={pad}
             />
           )}
         </div>
@@ -552,6 +580,7 @@ function DirectConnect({
   /** Opens the regular server panel, which resolves mods through the API. */
   onLookUp: (queryAddress: string) => void;
 }) {
+  const trapRef = useFocusTrap<HTMLDivElement>();
   const [address, setAddress] = useState("");
   const [queryPort, setQueryPort] = useState("27016");
 
@@ -564,6 +593,10 @@ function DirectConnect({
     <div className="overlay" onClick={onClose}>
       <div
         className="modal"
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         style={{ width: 460 }}
         onClick={(e) => e.stopPropagation()}
       >

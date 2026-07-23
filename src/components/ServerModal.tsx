@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import type { ServerDetails } from "../types";
+import { useFocusTrap } from "../useFocusTrap";
 import { modsInstalled, openWorkshopPage, serverDetails, subscribeMods } from "../api";
 
 interface Props {
@@ -27,6 +28,7 @@ export default function ServerModal({
   onError,
   onNotice,
 }: Props) {
+  const trapRef = useFocusTrap<HTMLDivElement>();
   const [details, setDetails] = useState<ServerDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -121,7 +123,14 @@ export default function ServerModal({
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontSize: 15 }}>{server?.name ?? "Loading…"}</h3>

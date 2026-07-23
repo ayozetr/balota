@@ -78,6 +78,35 @@ button {
   background: none;
 }
 
+/* Keyboard focus has to be obvious. In Steam Deck's Game Mode the controller
+   arrives as keyboard input — D-pad as arrows, A as Enter — so this ring is
+   the only thing telling the player where they are. */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* A controller's key events are synthetic, so the browser never treats them
+   as keyboard interaction and :focus-visible stays off. While a pad is in
+   use, plain :focus has to carry the ring. */
+:root.using-gamepad :focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.row-item:focus-visible,
+:root.using-gamepad .row-item:focus {
+  outline-offset: -2px;
+  background: var(--bg-hover);
+}
+
+/* The sidebar is reachable now, so its focus state has to read clearly. */
+:root.using-gamepad .nav-item:focus {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -927,6 +956,61 @@ input[type="checkbox"] {
   border-color: rgba(255, 59, 48, 0.35);
   background: rgba(255, 59, 48, 0.09);
   color: #ff9a93;
+}
+
+.pad-layout {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+/* Kenney's controller art: one filled path, tinted by currentColor. */
+.pad-body {
+  display: block;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.pad-body svg {
+  width: 118px;
+  height: auto;
+}
+
+.pad-map {
+  display: grid;
+  gap: 7px 18px;
+  flex: 1;
+  min-width: 240px;
+}
+
+.pad-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Button glyphs sit dim until their button is held. */
+.pad-glyph {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  transition: color 0.08s, transform 0.08s;
+}
+
+.pad-glyph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.pad-glyph.active {
+  color: var(--red);
+  transform: scale(1.18);
 }
 
 .kv {
