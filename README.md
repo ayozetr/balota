@@ -2,7 +2,7 @@
   <img src="docs/logo.png" alt="" width="200">
 </p>
 
-<h1 align="center">Balota</h1>
+<h1 align="center">Balota Launcher</h1>
 
 <p align="center"><strong>DayZ server browser and mod manager for Linux and the Steam Deck.</strong></p>
 
@@ -31,6 +31,9 @@ Steam with the symlinks Proton needs to load them.
 - **Mod housekeeping.** The Mods tab lists what is installed and unsubscribes in bulk,
   which is how mods actually leave the system — Steam deletes the files and stops
   tracking them.
+- **Keyboard and controller navigation.** The whole interface works from the keyboard,
+  and a plugged-in or paired controller drives it directly — built for the Steam Deck
+  and the couch.
 - Favourites, join history, and filters by map, mods, perspective, occupancy and
   password.
 
@@ -38,7 +41,19 @@ Steam with the symlinks Proton needs to load them.
 
 ## Install
 
-No packages yet — build from source.
+### Download
+
+Grab the AppImage from the [latest release](https://github.com/ayozetr/balota/releases/latest):
+
+```bash
+chmod +x Balota_1.0.0_amd64.AppImage
+./Balota_1.0.0_amd64.AppImage
+```
+
+It bundles GTK/WebKit and needs nothing installed, so it runs on any distro. A `.deb`
+is attached too for Debian, Ubuntu and derivatives.
+
+### Build from source
 
 **Dependencies**
 
@@ -105,29 +120,30 @@ yourself first).
   `steam -applaunch` only hands a request to the running Steam client, which spawns the
   game itself — wrapping that command wraps nothing. Settings shows the string to paste
   into Steam's own launch options, which is the one place that does work.
-- **Steam Deck is driven by keyboard, not the Gamepad API.** In Game Mode, Steam Input
-  hands desktop apps a controller as keyboard and mouse — D-pad as arrows, A as Enter,
-  B as Escape — so the whole interface is keyboard-navigable rather than reading the
-  controller directly.
 
-  | Key | Does |
-  | --- | --- |
-  | `↑` `↓` | Move through the server list |
-  | `Enter` | Open the selected server |
-  | `J` | Join it straight away |
-  | `F` | Toggle favourite |
-  | `Home` `End` | First / last server on the page |
-  | `Page Up` `Page Down` | Previous / next page |
-  | `/` | Jump to the search box |
-  | `F5` | Refresh the server list |
-  | `Esc` | Close a dialog, or leave a text field |
+## Steam Deck & controllers
 
-  Tab moves between regions rather than through every row: the list is one stop, and
-  the arrows take over inside it.
+The whole interface is keyboard-navigable, and a controller drives it two ways: read
+directly on the desktop (the d-pad and left stick move, A opens, B goes back, X
+favourites, Y joins, the shoulders page), and through Steam Input in Game Mode, where
+Steam turns the pad into the keystrokes below before Balota ever sees it.
 
-  A controller plugged straight into the machine works too — the d-pad and left stick
-  move, A opens, B goes back, X favourites, Y joins, and the shoulder buttons page.
-  Balota shows "Gamepad: connected" in the sidebar when it can see one.
+| Key | Does |
+| --- | --- |
+| `↑` `↓` | Move through the server list |
+| `Enter` | Open the selected server |
+| `J` | Join it straight away |
+| `F` | Toggle favourite |
+| `Home` `End` | First / last server on the page |
+| `Page Up` `Page Down` | Previous / next page |
+| `/` | Jump to the search box |
+| `F5` | Refresh the server list |
+| `Esc` | Close a dialog, or leave a text field |
+
+Tab moves between regions rather than through every row: the list is one stop, and the
+arrows take over inside it. Settings → Controller shows the detected pad, its button
+map, and a live readout — useful when a controller maps oddly, as some do over
+Bluetooth.
 
 ## Troubleshooting
 
