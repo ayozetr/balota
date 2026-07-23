@@ -172,6 +172,8 @@ The Proton mod-loading dance, the DZSA endpoints and the A2S challenge are writt
 ## Credits
 
 Server data comes from the public [dayzsalauncher.com](https://dayzsalauncher.com) API.
+Controller artwork is from [Kenney's Input Prompts](https://kenney.nl/assets/input-prompts)
+(CC0). Full third-party licences are in [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
 
 ## Legal
 

@@ -934,6 +934,17 @@ input[type="checkbox"] {
   line-height: 1.5;
 }
 
+/* Inline text link — for credits and the like inside a hint line. */
+.link {
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link:hover {
+  color: var(--text);
+}
+
 .note {
   display: flex;
   gap: 9px;

@@ -3,6 +3,7 @@ import { Gamepad2 } from "lucide-react";
 import PadBody, { Glyph } from "./PadDiagram";
 import type { Family } from "./PadDiagram";
 import type { PadState } from "../useGamepad";
+import { openUrl } from "../api";
 
 /**
  * Which hardware is in the player's hands, so the artwork and the button
@@ -114,6 +115,14 @@ export default function ControllerHelp({ pad, steamDeck }: Props) {
           {pad.axes.map((v) => v.toFixed(2)).join(", ")}]
         </p>
       )}
+
+      <p className="hint" style={{ fontSize: 11 }}>
+        Controller art by{" "}
+        <button className="link" onClick={() => openUrl("https://kenney.nl/assets/input-prompts")}>
+          Kenney
+        </button>{" "}
+        (CC0).
+      </p>
     </section>
   );
 }
