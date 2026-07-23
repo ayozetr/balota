@@ -17,7 +17,7 @@ import ControllerHelp from "./ControllerHelp";
 import type { PadState } from "../useGamepad";
 
 const LAUNCH_OPTIONS = "gamemoderun mangohud %command%";
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "1.0.0";
 
 interface Props {
   config: AppConfig;

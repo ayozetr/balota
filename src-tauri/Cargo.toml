@@ -3,7 +3,7 @@ members = ["workshop-helper"]
 
 [package]
 name = "balota"
-version = "0.2.0"
+version = "1.0.0"
 description = "Balota - navegador de servidores y gestor de mods de DayZ para Linux"
 authors = ["Ayoze Torres"]
 license = "GPL-3.0-or-later WITH Steamworks-exception"
