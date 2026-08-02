@@ -47,3 +47,7 @@ src-tauri/binaries/
 .cache/
 coverage/
 src-tauri/binaries/
+
+# Internal audit notes: a severity-ranked map of weaknesses in released
+# versions. Not for a public repo until the fixes have shipped and landed.
+AUDITORIA.md
