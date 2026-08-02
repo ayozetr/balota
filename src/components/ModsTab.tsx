@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckSquare,
@@ -21,6 +21,7 @@ import {
   unsubscribeMods,
 } from "../api";
 import { formatBytes } from "../format";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Props {
   env: SteamEnvironment | null;
@@ -35,11 +36,16 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   /** IDs Steam does not track — leftovers from a plain download. */
   const [orphans, setOrphans] = useState<Set<number>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+
+  const alive = useRef(true);
+  const reloadTimer = useRef<number>();
 
   async function load() {
     setLoading(true);
     try {
       const list = await installedMods(true);
+      if (!alive.current) return;
       setMods(list);
       setSelected(new Set());
 
@@ -47,19 +53,26 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
       // closed) the list still renders, just without the warning badges.
       try {
         const states = await modStates(list.map((mod) => mod.id));
-        setOrphans(new Set(states.filter((s) => !s.subscribed).map((s) => s.id)));
+        if (alive.current) {
+          setOrphans(new Set(states.filter((s) => !s.subscribed).map((s) => s.id)));
+        }
       } catch {
-        setOrphans(new Set());
+        if (alive.current) setOrphans(new Set());
       }
     } catch (e) {
-      onError(String(e));
+      if (alive.current) onError(String(e));
     } finally {
-      setLoading(false);
+      if (alive.current) setLoading(false);
     }
   }
 
   useEffect(() => {
+    alive.current = true;
     void load();
+    return () => {
+      alive.current = false;
+      window.clearTimeout(reloadTimer.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -73,29 +86,31 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
 
   const allSelected = mods.length > 0 && selected.size === mods.length;
 
+  const chosen = mods.filter((mod) => selected.has(mod.id));
+  const toDelete = chosen.filter((mod) => orphans.has(mod.id));
+  const toUnsubscribe = chosen.filter((mod) => !orphans.has(mod.id));
+
   /** Unsubscribing is how a subscribed mod leaves: Steam deletes the files and
    *  stops tracking it. Leftover downloads have no subscription to drop, so
    *  those are removed from disk instead. */
-  async function removeSelected(ids: number[]) {
-    if (ids.length === 0) return;
-
-    const toUnsubscribe = ids.filter((id) => !orphans.has(id));
-    const toDelete = ids.filter((id) => orphans.has(id));
+  async function removeSelected() {
+    setConfirming(false);
+    if (chosen.length === 0) return;
 
     setBusy(true);
     try {
       const parts: string[] = [];
       if (toUnsubscribe.length > 0) {
-        const count = await unsubscribeMods(toUnsubscribe);
+        const count = await unsubscribeMods(toUnsubscribe.map((m) => m.id));
         parts.push(`unsubscribed from ${count}`);
       }
       if (toDelete.length > 0) {
-        const count = await deleteMods(toDelete);
+        const count = await deleteMods(toDelete.map((m) => m.id));
         parts.push(`deleted ${count} untracked`);
       }
       onNotice(`Done: ${parts.join(", ")}. Steam may take a moment to tidy up.`);
       // Give Steam time to remove the files before re-reading the folder.
-      window.setTimeout(() => void load(), 2500);
+      reloadTimer.current = window.setTimeout(() => void load(), 2500);
     } catch (e) {
       onError(String(e));
     } finally {
@@ -107,9 +122,9 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
     try {
       const removed = await pruneSymlinks();
       onNotice(
-        removed === 0
+        removed.length === 0
           ? "No dangling mod links found."
-          : `Removed ${removed} dangling mod link(s).`,
+          : `Removed ${removed.length} dangling mod link(s): ${removed.join(", ")}.`,
       );
     } catch (e) {
       onError(String(e));
@@ -117,15 +132,13 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
   }
 
   const totalSize = mods.reduce((sum, mod) => sum + mod.sizeBytes, 0);
-  const selectedSize = mods
-    .filter((mod) => selected.has(mod.id))
-    .reduce((sum, mod) => sum + mod.sizeBytes, 0);
+  const selectedSize = chosen.reduce((sum, mod) => sum + mod.sizeBytes, 0);
 
   return (
     <div className="panel" style={{ flex: 1 }}>
       <div className="panel-head">
         <h2 style={{ fontSize: 14 }}>Installed Workshop mods</h2>
-        <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {mods.length} mod{mods.length === 1 ? "" : "s"}
           {totalSize > 0 && ` · ${formatBytes(totalSize)}`}
           {selected.size > 0 && ` · ${selected.size} selected (${formatBytes(selectedSize)})`}
@@ -148,7 +161,7 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
         {selected.size > 0 && (
           <button
             className="btn btn-sm"
-            onClick={() => removeSelected([...selected])}
+            onClick={() => setConfirming(true)}
             disabled={busy}
             title="Unsubscribe in Steam; untracked leftovers are deleted from disk"
           >
@@ -177,7 +190,7 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
             <Loader2 size={20} className="spin" />
             Reading the Workshop folder…
           </div>
-        ) : !env?.workshopDir ? (
+        ) : !env?.workshopDirs.length ? (
           <div className="empty">
             <FolderOpen size={22} />
             No Workshop folder yet. It appears once you subscribe to your first DayZ mod.
@@ -203,16 +216,21 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
             <div className="card-grid">
               {mods.map((mod) => {
                 const isOrphan = orphans.has(mod.id);
+                const isSelected = selected.has(mod.id);
                 return (
                   <div
                     key={mod.id}
-                    className="card"
+                    className={`card${isSelected ? " selected" : ""}`}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={`${mod.name}, ${formatBytes(mod.sizeBytes)}`}
+                    tabIndex={0}
                     onClick={() => toggle(mod.id)}
-                    style={{
-                      cursor: "pointer",
-                      ...(selected.has(mod.id)
-                        ? { borderColor: "var(--red)", background: "rgba(255,59,48,0.07)" }
-                        : {}),
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(mod.id);
+                      }
                     }}
                   >
                     <div
@@ -225,9 +243,10 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
                     >
                       <input
                         type="checkbox"
-                        checked={selected.has(mod.id)}
-                        onChange={() => toggle(mod.id)}
-                        onClick={(e) => e.stopPropagation()}
+                        checked={isSelected}
+                        tabIndex={-1}
+                        readOnly
+                        aria-hidden="true"
                       />
                       <span
                         style={{
@@ -243,11 +262,15 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
                       </span>
                       <button
                         className="icon-btn"
+                        tabIndex={-1}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openWorkshopPage(mod.id);
+                          openWorkshopPage(mod.id).catch(() =>
+                            onError("Could not open the Workshop page."),
+                          );
                         }}
                         title="Open the Workshop page"
+                        aria-label={`Open the Workshop page for ${mod.name}`}
                       >
                         <ExternalLink size={13} />
                       </button>
@@ -259,7 +282,7 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
                         alignItems: "center",
                         gap: 6,
                         fontSize: 11,
-                        color: "var(--text-dim)",
+                        color: "var(--text-muted)",
                       }}
                     >
                       <span className="mono">{mod.id}</span>
@@ -277,6 +300,45 @@ export default function ModsTab({ env, onError, onNotice }: Props) {
           </>
         )}
       </div>
+
+      {confirming && (
+        <ConfirmDialog
+          destructive={toDelete.length > 0}
+          title={`Remove ${chosen.length} mod${chosen.length === 1 ? "" : "s"}?`}
+          confirmLabel={`Remove ${chosen.length}`}
+          onCancel={() => setConfirming(false)}
+          onConfirm={removeSelected}
+          body={
+            <>
+              <p style={{ marginBottom: 10 }}>
+                This frees <strong>{formatBytes(selectedSize)}</strong>.
+              </p>
+              <ul style={{ margin: "0 0 10px 18px", fontSize: 12.5, lineHeight: 1.7 }}>
+                {toUnsubscribe.length > 0 && (
+                  <li>
+                    <strong>{toUnsubscribe.length}</strong> will be unsubscribed in Steam.
+                    Steam deletes the files; subscribing again re-downloads them.
+                  </li>
+                )}
+                {toDelete.length > 0 && (
+                  <li>
+                    <strong>{toDelete.length}</strong> are not tracked by Steam and will be{" "}
+                    <strong>deleted from disk. This cannot be undone</strong>, and getting
+                    them back means downloading them again.
+                  </li>
+                )}
+              </ul>
+              <p className="hint" style={{ margin: 0 }}>
+                {chosen
+                  .slice(0, 6)
+                  .map((mod) => mod.name)
+                  .join(", ")}
+                {chosen.length > 6 && ` and ${chosen.length - 6} more`}
+              </p>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }
