@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "Balota \u2014 DayZ Linux Launcher",
-        "width": 1360,
-        "height": 860,
-        "minWidth": 1000,
-        "minHeight": 640,
+        "width": 1280,
+        "height": 780,
+        "minWidth": 880,
+        "minHeight": 600,
         "resizable": true,
         "decorations": false,
         "transparent": true,
@@ -25,14 +25,15 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors 'none'"
     }
   },
   "bundle": {
     "active": true,
     "targets": [
       "appimage",
-      "deb"
+      "deb",
+      "rpm"
     ],
     "externalBin": [
       "binaries/balota-workshop"

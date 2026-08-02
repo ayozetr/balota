@@ -2,8 +2,15 @@
 //! Minimal parser for Valve's KeyValues format (VDF).
 //!
 //! Used to read `libraryfolders.vdf` (Steam libraries spread across several
-//! drives) and `appmanifest_221100.acf` (DayZ's real install folder, which is
-//! not always called "DayZ").
+//! drives), `appmanifest_221100.acf` (DayZ's real install folder, which is not
+//! always called "DayZ") and `loginusers.vdf` (the Steam display name offered
+//! as the in-game name).
+
+/// Deep enough for anything Steam writes, shallow enough that a corrupt file
+/// cannot exhaust the stack. `parse_entries` recurses, and this runs on a
+/// blocking pool thread whose stack overflow is a SIGSEGV, not a catchable
+/// panic.
+const MAX_DEPTH: usize = 64;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -40,9 +47,14 @@ impl Value {
 /// Parses a whole VDF document. The root object is implicit: a file like
 /// `"libraryfolders" { ... }` comes back as an object with a single key.
 pub fn parse(input: &str) -> Value {
+    // Steam writes these as plain UTF-8, but a file that has been through an
+    // editor can pick up a BOM, and it is not whitespace: it would glue itself
+    // to the first key and make every lookup miss.
+    let input = input.strip_prefix('\u{FEFF}').unwrap_or(input);
+
     let tokens = tokenize(input);
     let mut pos = 0;
-    Value::Obj(parse_entries(&tokens, &mut pos))
+    Value::Obj(parse_entries(&tokens, &mut pos, 0))
 }
 
 #[derive(Debug, PartialEq)]
@@ -103,12 +115,14 @@ fn tokenize(input: &str) -> Vec<Token> {
             }
             _ => {
                 // Unquoted token: unusual in Steam's own files, but the format
-                // allows it.
+                // allows it. It has to stop at a quote as well, or a stray
+                // character before a key swallows the key whole.
                 let mut s = String::new();
                 while i < chars.len()
                     && !chars[i].is_whitespace()
                     && chars[i] != '{'
                     && chars[i] != '}'
+                    && chars[i] != '"'
                 {
                     s.push(chars[i]);
                     i += 1;
@@ -121,8 +135,21 @@ fn tokenize(input: &str) -> Vec<Token> {
     tokens
 }
 
-fn parse_entries(tokens: &[Token], pos: &mut usize) -> Vec<(String, Value)> {
+fn parse_entries(tokens: &[Token], pos: &mut usize, depth: usize) -> Vec<(String, Value)> {
     let mut entries = Vec::new();
+    if depth > MAX_DEPTH {
+        // Skip to the end of this block rather than recursing further.
+        let mut open = 1;
+        while *pos < tokens.len() && open > 0 {
+            match tokens[*pos] {
+                Token::Open => open += 1,
+                Token::Close => open -= 1,
+                Token::Str(_) => {}
+            }
+            *pos += 1;
+        }
+        return entries;
+    }
 
     while *pos < tokens.len() {
         match &tokens[*pos] {
@@ -133,7 +160,7 @@ fn parse_entries(tokens: &[Token], pos: &mut usize) -> Vec<(String, Value)> {
             Token::Open => {
                 // Keyless block: shouldn't happen, skip it.
                 *pos += 1;
-                parse_entries(tokens, pos);
+                parse_entries(tokens, pos, depth + 1);
             }
             Token::Str(key) => {
                 let key = key.clone();
@@ -141,14 +168,22 @@ fn parse_entries(tokens: &[Token], pos: &mut usize) -> Vec<(String, Value)> {
                 match tokens.get(*pos) {
                     Some(Token::Open) => {
                         *pos += 1;
-                        let inner = parse_entries(tokens, pos);
+                        let inner = parse_entries(tokens, pos, depth + 1);
                         entries.push((key, Value::Obj(inner)));
                     }
                     Some(Token::Str(val)) => {
                         entries.push((key, Value::Str(val.clone())));
                         *pos += 1;
                     }
-                    _ => break,
+                    // A key with no value, right before the block ends. This
+                    // used to `break` without consuming the `}`, which left the
+                    // parent reading this block's closing brace as its own and
+                    // silently dropped every sibling that followed.
+                    Some(Token::Close) => {
+                        *pos += 1;
+                        break;
+                    }
+                    None => break,
                 }
             }
         }
@@ -249,5 +284,73 @@ mod tests {
             root.get("root").unwrap().get("path").unwrap().as_str(),
             Some(r"C:\games\dayz")
         );
+    }
+
+    /// A file that has been through an editor can start with a BOM. It is not
+    /// whitespace, so it used to be read as part of the first key and every
+    /// library on the machine went missing.
+    #[test]
+    fn a_byte_order_mark_does_not_hide_the_first_key() {
+        let src = "\u{FEFF}\"libraryfolders\"\n{\n\t\"0\" { \"path\" \"/lib\" }\n}\n";
+        let root = parse(src);
+        assert!(root.get("libraryfolders").is_some());
+    }
+
+    /// A key with no value used to desynchronise the parser and take every
+    /// following sibling down with it.
+    #[test]
+    fn a_key_without_a_value_does_not_swallow_its_siblings() {
+        let src = r#"
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"/first"
+		"label"
+	}
+	"1"
+	{
+		"path"		"/second"
+	}
+}
+"#;
+        let folders = parse(src);
+        let folders = folders.get("libraryfolders").unwrap();
+        let paths: Vec<&str> = folders
+            .entries()
+            .iter()
+            .filter_map(|(_, v)| v.get("path")?.as_str())
+            .collect();
+        assert_eq!(paths, vec!["/first", "/second"]);
+    }
+
+    /// Unbounded recursion here is a stack overflow, which `panic = "abort"`
+    /// cannot even turn into an error message.
+    #[test]
+    fn deeply_nested_input_is_bounded_instead_of_overflowing_the_stack() {
+        let deep = format!("\"a\"\n{}{}", "{ \"b\" ".repeat(20_000), "}".repeat(20_000));
+        let parsed = parse(&deep);
+        // The point is that it returns at all.
+        assert!(parsed.get("a").is_some());
+    }
+
+    #[test]
+    fn reads_the_most_recent_login() {
+        let src = r#"
+"users"
+{
+	"7656119"
+	{
+		"AccountName"		"ayoze"
+		"PersonaName"		"Ayoze"
+		"MostRecent"		"1"
+	}
+}
+"#;
+        let users = parse(src);
+        let users = users.get("users").unwrap();
+        let (_, user) = &users.entries()[0];
+        assert_eq!(user.get("PersonaName").unwrap().as_str(), Some("Ayoze"));
+        assert_eq!(user.get("mostrecent").unwrap().as_str(), Some("1"));
     }
 }

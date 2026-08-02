@@ -15,6 +15,7 @@ export function useMaximized(): boolean {
   useEffect(() => {
     const appWindow = getCurrentWindow();
     let unlisten: (() => void) | undefined;
+    let mounted = true;
 
     const sync = () =>
       appWindow.isMaximized().then(setMaximized).catch(() => undefined);
@@ -25,11 +26,17 @@ export function useMaximized(): boolean {
     appWindow
       .onResized(sync)
       .then((fn) => {
-        unlisten = fn;
+        // Unmounting before this resolved used to leave the listener attached
+        // with nothing left to detach it.
+        if (mounted) unlisten = fn;
+        else fn();
       })
       .catch(() => undefined);
 
-    return () => unlisten?.();
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
   }, []);
 
   return maximized;

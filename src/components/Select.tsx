@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 export interface SelectOption {
@@ -37,11 +37,13 @@ export default function Select({
   const [dropUp, setDropUp] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const search = useRef({ text: "", at: 0 });
+  const id = useId();
 
   const selected = options.findIndex((option) => option.value === value);
-  const current = options[selected] ?? options[0];
+  const current = options[selected];
 
   // Close when the click lands anywhere else.
   useEffect(() => {
@@ -71,10 +73,17 @@ export default function Select({
       ?.scrollIntoView({ block: "nearest" });
   }, [open, active]);
 
+  function close(refocus = true) {
+    setOpen(false);
+    // Picking an option with the mouse used to leave focus on a `<div>` that
+    // was about to be removed, which dropped keyboard navigation entirely.
+    if (refocus) triggerRef.current?.focus();
+  }
+
   function commit(index: number) {
     const option = options[index];
     if (option) onChange(option.value);
-    setOpen(false);
+    close();
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -88,7 +97,8 @@ export default function Select({
       case "Escape":
         if (open) {
           e.preventDefault();
-          setOpen(false);
+          e.stopPropagation();
+          close();
         }
         return;
       case "ArrowDown":
@@ -137,23 +147,40 @@ export default function Select({
   }
 
   return (
-    <div className="select" ref={rootRef} style={{ width }}>
+    <div
+      className="select"
+      ref={rootRef}
+      style={{ width }}
+      // Tabbing away, or a controller moving focus out, has to close the menu
+      // too — otherwise it stayed open, floating over whatever came next.
+      onBlur={(e) => {
+        if (open && !e.currentTarget.contains(e.relatedTarget as Node)) {
+          close(false);
+        }
+      }}
+    >
       <button
         type="button"
+        ref={triggerRef}
         className={`select-trigger${open ? " open" : ""}`}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? `${id}-list` : undefined}
+        aria-activedescendant={open ? `${id}-option-${active}` : undefined}
         aria-label={label}
       >
-        <span className="select-value">{current?.label ?? ""}</span>
+        {/* Falling back to `options[0]` showed a value that was not selected
+            whenever the current one was filtered out of the list. */}
+        <span className="select-value">{current?.label ?? "—"}</span>
         <ChevronDown size={15} className="select-arrow" />
       </button>
 
       {open && (
         <div
           className={`select-menu${dropUp ? " up" : ""}`}
+          id={`${id}-list`}
           role="listbox"
           aria-label={label}
           ref={listRef}
@@ -161,6 +188,7 @@ export default function Select({
           {options.map((option, index) => (
             <div
               key={option.value}
+              id={`${id}-option-${index}`}
               role="option"
               aria-selected={option.value === value}
               data-active={index === active}

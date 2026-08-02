@@ -1,13 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { useEffect } from "react";
 
-const FOCUSABLE = [
+export const FOCUSABLE = [
   "button:not([disabled])",
   "input:not([disabled])",
   "select:not([disabled])",
   '[tabindex]:not([tabindex="-1"])',
   ".row-item",
 ].join(",");
+
+/**
+ * Elements deliberately taken out of the tab order stay out of directional
+ * navigation too.
+ *
+ * The table gives every row a roving tabindex and sets `tabIndex={-1}` on the
+ * star and Join buttons inside it, precisely so reaching the pager does not
+ * take 150 presses. `button:not([disabled])` matched them anyway, so a d-pad
+ * walked into all 100 of them.
+ */
+function reachable(el: HTMLElement): boolean {
+  return el.tabIndex >= 0 || el.classList.contains("row-item");
+}
 
 interface Rect {
   el: HTMLElement;
@@ -52,7 +65,7 @@ export function useSpatialNav() {
 
       const from = active && scope.contains(active) ? centre(active) : null;
       const candidates = Array.from(scope.querySelectorAll<HTMLElement>(FOCUSABLE))
-        .filter((el) => el !== active && el.offsetParent !== null)
+        .filter((el) => el !== active && el.offsetParent !== null && reachable(el))
         .map(centre)
         .filter((c): c is Rect => c !== null);
 

@@ -36,6 +36,12 @@ export function useShortcuts({
       }
       if (typing) return;
 
+      // A dialog owns the keyboard while it is open. These are window-level
+      // shortcuts, so the shoulder buttons used to page the list *behind* the
+      // overlay, and `/` sent focus to a search box the user could not see —
+      // which also broke the dialog's focus trap for good.
+      if (document.querySelector('[role="dialog"]')) return;
+
       switch (e.key) {
         case "/":
           e.preventDefault();

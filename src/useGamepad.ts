@@ -50,6 +50,18 @@ const REPEAT_DELAY = 380;
 const REPEAT_RATE = 90;
 
 /**
+ * Keys that stand for "activate this". A synthetic KeyboardEvent is not
+ * trusted, so the browser never performs the default action for it: dispatching
+ * Enter at a `<button>` moves nothing. Anything with its own `onKeyDown` still
+ * gets first refusal, and only if it declines do we click.
+ */
+const ACTIVATION_KEYS = new Set(["Enter", " "]);
+const ACTIVATABLE =
+  'button, input[type="checkbox"], input[type="radio"], a[href], [role="button"], [role="option"]';
+/** Only these repeat while held. Repeating "open" or "join" is never wanted. */
+const REPEATABLE = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown"]);
+
+/**
  * Decodes a d-pad reported as a hat on an axis.
  *
  * Non-standard pads — a Nintendo Pro Controller over `hid-nintendo` is the
@@ -76,25 +88,58 @@ export function hatDirections(v: number): string[] {
   return table[sector] ?? [];
 }
 
+/** The element the pad should act on, or null if there is nothing to act on. */
+function padTarget(): HTMLElement | null {
+  const active = document.activeElement as HTMLElement | null;
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+
+  // A dialog owns the pad while it is open, even if focus escaped it.
+  if (dialog && (!active || !dialog.contains(active))) {
+    return (
+      dialog.querySelector<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? dialog
+    );
+  }
+
+  if (active && active !== document.body && active !== document.documentElement) {
+    return active;
+  }
+
+  // Nothing focused: adopt the first row, or the first control on the page.
+  // Looking only for `.row-item` left the pad dead on the Mods and Settings
+  // tabs, which have no rows at all.
+  return document.querySelector<HTMLElement>(
+    '.row-item, .nav-item, button:not([disabled]), input:not([disabled])',
+  );
+}
+
 function send(key: string) {
   // Synthetic events are not "trusted", so :focus-visible never triggers and
   // the ring stays invisible even though focus moved. Flagging the document
   // lets the stylesheet fall back to plain :focus while a pad is in use.
   document.documentElement.classList.add("using-gamepad");
 
-  let target = document.activeElement as HTMLElement | null;
+  let target = padTarget();
+  if (!target) return;
 
-  // With nothing focused the events would go nowhere, so the pad adopts the
-  // first row and starts from there.
-  if (!target || target === document.body || target === document.documentElement) {
-    target = document.querySelector<HTMLElement>(".row-item");
-    target?.focus();
-    if (!target) return;
+  if (target !== document.activeElement) {
+    target.focus();
+    // Adopting focus is the whole action for a direction key; sending it as
+    // well would skip the row the user just landed on.
+    if (!ACTIVATION_KEYS.has(key)) return;
   }
 
   const init: KeyboardEventInit = { key, bubbles: true, cancelable: true };
-  target.dispatchEvent(new KeyboardEvent("keydown", init));
+  const notCancelled = target.dispatchEvent(new KeyboardEvent("keydown", init));
   target.dispatchEvent(new KeyboardEvent("keyup", init));
+
+  // The event was not handled, so nothing happened: an untrusted key event
+  // never performs a click on its own. Do it explicitly, or every button in
+  // every dialog stays unreachable from the pad.
+  if (notCancelled && ACTIVATION_KEYS.has(key) && target.matches(ACTIVATABLE)) {
+    target.click();
+  }
 }
 
 /** Among the connected pads, the one actually worth reading. */
@@ -136,18 +181,31 @@ export function useGamepad(): PadState {
     if (!("getGamepads" in navigator)) return;
 
     let frame = 0;
+    let running = false;
     const held = new Map<string, { since: number; last: number }>();
     // Axis 9 only counts as a hat once it has been seen resting outside
-    // [-1, 1]; this keeps an analog axis that rests at 0 from firing "down".
-    let hatArmed = false;
+    // [-1, 1]. Tracked per pad: swapping controllers used to leave the flag
+    // armed and an analog axis resting at 0 then decoded as a held "down".
+    let hatArmedFor: string | null = null;
+
+    const anyPad = () =>
+      Array.from(navigator.getGamepads?.() ?? []).some((p) => p !== null);
+
+    const stop = () => {
+      running = false;
+      cancelAnimationFrame(frame);
+      held.clear();
+      hatArmedFor = null;
+      setState((s) => (s.id === null ? s : EMPTY));
+    };
 
     const poll = () => {
       const pad = activePad(Array.from(navigator.getGamepads?.() ?? []));
 
       if (!pad) {
-        held.clear();
-        setState((s) => (s.id === null ? s : EMPTY));
-        frame = requestAnimationFrame(poll);
+        // No pad at all: stop burning a frame callback until one shows up.
+        // This used to poll at 60-90 Hz forever, on battery, on a Deck.
+        stop();
         return;
       }
 
@@ -171,8 +229,8 @@ export function useGamepad(): PadState {
       // D-pad reported as a hat on axis 9 (non-standard pads).
       const hat = pad.axes[9];
       if (hat !== undefined) {
-        if (Math.abs(hat) > 1.05) hatArmed = true;
-        if (hatArmed) {
+        if (Math.abs(hat) > 1.05) hatArmedFor = pad.id;
+        if (hatArmedFor === pad.id) {
           for (const dir of hatDirections(hat)) {
             const { key, button } = HAT_DIRS[dir];
             pressed.add(key);
@@ -186,7 +244,11 @@ export function useGamepad(): PadState {
         if (!state) {
           held.set(key, { since: now, last: now });
           send(key);
-        } else if (now - state.since > REPEAT_DELAY && now - state.last > REPEAT_RATE) {
+        } else if (
+          REPEATABLE.has(key) &&
+          now - state.since > REPEAT_DELAY &&
+          now - state.last > REPEAT_RATE
+        ) {
           state.last = now;
           send(key);
         }
@@ -220,8 +282,40 @@ export function useGamepad(): PadState {
       frame = requestAnimationFrame(poll);
     };
 
-    frame = requestAnimationFrame(poll);
-    return () => cancelAnimationFrame(frame);
+    const start = () => {
+      if (running) return;
+      running = true;
+      frame = requestAnimationFrame(poll);
+    };
+
+    const onDisconnected = () => {
+      // Another pad may still be attached.
+      if (!anyPad()) stop();
+    };
+
+    // A real key press or click means the pad is not driving any more, so the
+    // focus ring goes back to normal. This class used to be added once and
+    // never removed, leaving the ring stuck on for the rest of the session.
+    const onHumanInput = (e: Event) => {
+      if (e.isTrusted) document.documentElement.classList.remove("using-gamepad");
+    };
+
+    window.addEventListener("gamepadconnected", start);
+    window.addEventListener("gamepaddisconnected", onDisconnected);
+    window.addEventListener("pointerdown", onHumanInput, true);
+    window.addEventListener("keydown", onHumanInput, true);
+
+    // A pad connected before this mounted does not fire the event again.
+    if (anyPad()) start();
+
+    return () => {
+      window.removeEventListener("gamepadconnected", start);
+      window.removeEventListener("gamepaddisconnected", onDisconnected);
+      window.removeEventListener("pointerdown", onHumanInput, true);
+      window.removeEventListener("keydown", onHumanInput, true);
+      cancelAnimationFrame(frame);
+      running = false;
+    };
   }, []);
 
   return state;

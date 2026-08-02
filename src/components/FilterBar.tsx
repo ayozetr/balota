@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import { memo } from "react";
 import { Search } from "lucide-react";
 import type { MapCount, ModFilter, Perspective } from "../types";
 import { formatNumber } from "../format";
@@ -36,7 +37,7 @@ const PERSPECTIVE_OPTIONS = [
   { value: "tpp", label: "3PP allowed" },
 ];
 
-export default function FilterBar(props: Props) {
+function FilterBar(props: Props) {
   const mapOptions = [
     { value: "", label: "All maps" },
     ...props.maps.map((entry) => ({
@@ -113,3 +114,5 @@ export default function FilterBar(props: Props) {
     </div>
   );
 }
+
+export default memo(FilterBar);

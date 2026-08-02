@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only by default: nothing here publishes anything.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -25,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - uses: Swatinem/rust-cache@v2
@@ -34,15 +42,45 @@ jobs:
 
       - run: npm ci
 
+      - name: Type-check the frontend
+        run: npx tsc --noEmit
+
       # tauri-build needs the frontend bundle to exist before the crate compiles.
       - name: Build frontend
         run: npm run build
 
       - name: Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 
+      # --workspace and --all-targets on purpose: without them the Workshop
+      # helper and the test code itself were never linted.
       - name: Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: >
+          cargo clippy --manifest-path src-tauri/Cargo.toml
+          --workspace --all-targets --locked -- -D warnings
 
       - name: Tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --locked
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Fails on actual vulnerabilities only. The tree currently carries 17
+      # "unmaintained" advisories, all of them the GTK3 bindings Tauri pulls in
+      # transitively; --deny warnings here would just be permanently red.
+      - name: cargo-audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file src-tauri/Cargo.lock
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm audit --audit-level=high

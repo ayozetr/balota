@@ -17,7 +17,10 @@
 
   --text: #eef1f6;
   --text-muted: #93a0b5;
-  --text-dim: #5d6b80;
+  /* Was #5d6b80, which is 3.5:1 against --bg — under the 4.5:1 WCAG AA needs,
+     and it was being used at 11-12px. This is 5.5:1 and still reads as the
+     quietest of the three. */
+  --text-dim: #7d8b9f;
 
   --radius: 10px;
   --radius-sm: 7px;
@@ -1090,5 +1093,139 @@ input[type="checkbox"] {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------- text overflow guards -- */
+
+/* Server names are third-party data: they arrive 200 characters long, or as a
+   single unbroken run of box-drawing characters with no space to wrap at.
+   Either one used to push the layout sideways or paint over the close button. */
+.clamp {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-head h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------ state feedback -- */
+
+.btn-danger {
+  background: linear-gradient(140deg, #ff4b40, #cc2318);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(140deg, #ff5f55, #d9291d);
+}
+
+input.invalid,
+input[aria-invalid="true"] {
+  border-color: var(--orange);
+}
+
+.hint.warn {
+  color: var(--orange);
+}
+
+.card.selected {
+  border-color: var(--red);
+  background: rgba(255, 59, 48, 0.07);
+}
+
+.card {
+  cursor: pointer;
+}
+
+.card:focus-visible,
+:root.using-gamepad .card:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ responsive -- */
+
+/* The Steam Deck is 1280x800 and the app's own default window was 1360x860:
+   it did not fit on the machine the project is built for. Everything below
+   trades padding and the widest columns for room, in that order. */
+
+@media (max-width: 1180px) {
+  .sidebar {
+    width: 178px;
+  }
+
+  .brand {
+    padding: 14px 12px;
+  }
+
+  .header,
+  .content {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .filters {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 1000px), (max-height: 720px) {
+  /* Drop the version line under each server name and the map column: the
+     address and the player count are what the choice is actually made on. */
+  .server-addr {
+    display: none;
+  }
+
+  .row {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .section {
+    gap: 8px;
+  }
+}
+
+@media (max-height: 800px) {
+  .brand {
+    padding: 12px 16px;
+  }
+
+  .status-card {
+    font-size: 11px;
+  }
+
+  .panel-head {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
+/* Touch and gamepad both want a bigger target than a mouse does. */
+@media (pointer: coarse) {
+  .btn-sm {
+    padding: 8px 12px;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
