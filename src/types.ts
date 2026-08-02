@@ -8,10 +8,13 @@ export interface SteamEnvironment {
   steamRoot: string | null;
   libraries: string[];
   dayzDir: string | null;
-  workshopDir: string | null;
+  /** Every Workshop folder found, the game's library first. */
+  workshopDirs: string[];
   dayzFound: boolean;
   /** Set on a Steam Deck: "Steam Deck (LCD)" or "(OLED)". */
   steamDeck: string | null;
+  /** Steam's display name, offered as the in-game name on first run. */
+  suggestedName: string | null;
   notes: string[];
 }
 
@@ -70,9 +73,28 @@ export interface ItemState {
 
 export interface ModActionResult {
   count: number;
+  /** The IDs Steam actually took. Waiting on the ones it rejected is how the
+   *  install dialog used to hang forever. */
+  accepted: number[];
   /** Steam took the files but not a subscription — no auto-updates. */
   downloadedOnly: boolean;
   warning: string | null;
+}
+
+export interface ModInfo {
+  id: number;
+  title: string;
+  /** Download size in bytes; 0 when Steam does not report one. */
+  sizeBytes: number;
+  /** The size came from the copy already on disk. */
+  installed: boolean;
+}
+
+export interface ModInfoReply {
+  items: ModInfo[];
+  /** IDs Steam knows nothing about — pulled from the Workshop, most likely.
+   *  These are the ones that would never finish downloading. */
+  unknown: number[];
 }
 
 export interface ListStatus {
@@ -102,19 +124,53 @@ export interface HistoryEntry {
   timesPlayed: number;
 }
 
+/** Filters worth remembering between sessions. */
+export interface SavedFilters {
+  search: string;
+  map: string | null;
+  mods: string | null;
+  perspective: string | null;
+  hideEmpty: boolean;
+  hideFull: boolean;
+  hidePassword: boolean;
+  sort: string | null;
+  sortDesc: boolean | null;
+  tab: string | null;
+}
+
 export interface AppConfig {
   playerName: string;
   customSteamRoot: string | null;
   extraLaunchArgs: string;
   favorites: string[];
   history: HistoryEntry[];
+  filters: SavedFilters;
+}
+
+/**
+ * The fields Settings owns. Sending the whole `AppConfig` back meant a
+ * keystroke carried a stale `favorites` list with it, undoing a star clicked
+ * a moment earlier.
+ *
+ * `customSteamRoot: null` clears the path; leaving the key out keeps it.
+ */
+export interface SettingsPatch {
+  playerName?: string;
+  customSteamRoot?: string | null;
+  extraLaunchArgs?: string;
+  filters?: SavedFilters;
 }
 
 export type ModFilter = "all" | "modded" | "vanilla";
 export type Perspective = "all" | "fpp" | "tpp";
 export type SortBy = "players" | "name" | "map";
 /** Ping is measured client-side, so ordering by it never reaches the backend. */
-export type SortMode = SortBy | "ping";
+export type SortColumn = SortBy | "ping";
+
+export interface SortMode {
+  by: SortColumn;
+  desc: boolean;
+}
 
 export interface ServerFilter {
   search: string;
@@ -127,6 +183,7 @@ export interface ServerFilter {
   onlyFavorites: boolean;
   favorites: string[];
   sort: SortBy;
+  sortDesc: boolean;
   page: number;
   pageSize: number;
 }

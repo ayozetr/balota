@@ -7,6 +7,7 @@ import type {
   InstalledMod,
   ItemState,
   ModActionResult,
+  ModInfoReply,
   LaunchOutcome,
   LaunchRequest,
   ListStatus,
@@ -15,6 +16,7 @@ import type {
   ServerDetails,
   ServerFilter,
   ServerPage,
+  SettingsPatch,
   SteamEnvironment,
 } from "./types";
 
@@ -52,6 +54,10 @@ export const unsubscribeMods = (ids: number[]) =>
 export const modStates = (ids: number[]) =>
   invoke<ItemState[]>("mod_states", { ids });
 
+/** How large these mods are, asked before committing to the download. */
+export const modSizes = (ids: number[]) =>
+  invoke<ModInfoReply>("mod_sizes", { ids });
+
 /** Deletes leftover downloads outright. */
 export const deleteMods = (ids: number[]) =>
   invoke<number>("delete_mods", { ids });
@@ -60,7 +66,8 @@ export const deleteMods = (ids: number[]) =>
 export const modsInstalled = (ids: number[]) =>
   invoke<number[]>("mods_installed", { ids });
 
-export const pruneSymlinks = () => invoke<number>("prune_symlinks");
+/** Names of the dangling mod links that were removed. */
+export const pruneSymlinks = () => invoke<string[]>("prune_symlinks");
 
 export const launchGame = (request: LaunchRequest) =>
   invoke<LaunchOutcome>("launch_game", { request });
@@ -69,14 +76,18 @@ export const openUrl = (url: string) => invoke<void>("open_url", { url });
 
 export const getConfig = () => invoke<AppConfig>("get_config");
 
-export const saveConfig = (config: AppConfig) =>
-  invoke<AppConfig>("save_config", { config });
+/** Applies only the fields Settings owns; favourites and history are left be. */
+export const saveSettings = (patch: SettingsPatch) =>
+  invoke<AppConfig>("save_settings", { patch });
 
 export const toggleFavorite = (id: string) =>
   invoke<AppConfig>("toggle_favorite", { id });
 
 export const recordLaunch = (id: string, name: string, map: string) =>
   invoke<AppConfig>("record_launch", { id, name, map });
+
+export const forgetLaunch = (id: string) =>
+  invoke<AppConfig>("forget_launch", { id });
 
 /** Steam's own properties dialog, where launch options are edited. */
 export const openSteamProperties = () =>
