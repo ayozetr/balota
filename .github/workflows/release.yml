@@ -1,0 +1,103 @@
+name: Release
+
+# Builds the bundles in a clean, auditable environment and publishes them with
+# checksums. Until now the artefacts were built by hand on the maintainer's
+# laptop and uploaded with nothing a user could verify them against.
+on:
+  push:
+    tags: ["v*"]
+  # Lets a release be rehearsed without cutting a tag.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04 # oldest supported glibc wins: the AppImage has to run everywhere
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev build-essential curl wget file libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+
+      # Fetches Valve's library by pinned sha256 and fails loudly if it does
+      # not match, rather than globbing the cargo registry and hoping.
+      - name: Build the Workshop helper and fetch libsteam_api.so
+        run: |
+          cargo fetch --manifest-path src-tauri/Cargo.toml --locked
+          npm run helper
+
+      - name: Build the bundles
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          NO_STRIP: 1
+        run: |
+          export LD_LIBRARY_PATH="$PWD/src-tauri/binaries${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          npm run build
+          npx tauri build
+
+      - name: Collect artefacts and checksums
+        run: |
+          mkdir -p release
+          find src-tauri/target/release/bundle \
+            \( -name '*.AppImage' -o -name '*.deb' \) -exec cp {} release/ \;
+          cd release
+          sha256sum * > SHA256SUMS
+          echo "--- published files ---"
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles
+          path: release/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only this job writes anything
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+          path: release
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Balota ${TAG#v}" \
+            --generate-notes \
+            --verify-tag \
+            release/* \
+          || gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" release/* --clobber

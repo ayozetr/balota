@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "app": "npm run helper && tauri dev",
-    "app:build": "npm run helper && APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1 LD_LIBRARY_PATH=\"$PWD/src-tauri/binaries:$LD_LIBRARY_PATH\" tauri build",
-    "helper": "cd src-tauri && cargo build --release -p balota-workshop && mkdir -p binaries && cp target/release/balota-workshop binaries/balota-workshop-$(rustc -vV | sed -n 's/^host: //p') && cp \"$(find $HOME/.cargo/registry/src -path '*steamworks-sys*/redistributable_bin/linux64/libsteam_api.so' | head -1)\" binaries/"
+    "app:build": "npm run helper && APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1 LD_LIBRARY_PATH=\"$PWD/src-tauri/binaries${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\" tauri build",
+    "helper": "cargo build --manifest-path src-tauri/Cargo.toml --release -p balota-workshop --locked && mkdir -p src-tauri/binaries && cp src-tauri/target/release/balota-workshop \"src-tauri/binaries/balota-workshop-$(rustc -vV | sed -n 's/^host: //p')\" && bash scripts/fetch-steam-lib.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
