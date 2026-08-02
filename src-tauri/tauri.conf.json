@@ -32,7 +32,8 @@
     "active": true,
     "targets": [
       "appimage",
-      "deb"
+      "deb",
+      "rpm"
     ],
     "externalBin": [
       "binaries/balota-workshop"
