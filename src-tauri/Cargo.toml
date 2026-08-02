@@ -1,14 +1,18 @@
 [workspace]
 members = ["workshop-helper"]
+# Without this, a bare `cargo clippy`/`cargo test` in here only ever covered the
+# root package — so the one component that links against Valve's SDK was never
+# built by CI at all.
+default-members = [".", "workshop-helper"]
 
 [package]
 name = "balota"
 version = "1.0.0"
-description = "Balota - navegador de servidores y gestor de mods de DayZ para Linux"
+description = "Balota - DayZ server browser and mod manager for Linux"
 authors = ["Ayoze Torres"]
 license = "GPL-3.0-or-later WITH Steamworks-exception"
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.88"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

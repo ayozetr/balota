@@ -2,8 +2,8 @@
 
 ## Setup
 
-Install the system dependencies listed in the [README](README.md), plus Rust 1.77+ and
-Node.js 18+.
+Install the system dependencies listed in the [README](README.md), plus Rust 1.88+ and
+Node.js 20+.
 
 ```bash
 npm install
@@ -79,7 +79,7 @@ Never ping the full list.
 ## Tests
 
 ```bash
-cd src-tauri && cargo test      # 23 tests, no network access needed
+cd src-tauri && cargo test      # 49 tests, no network access needed
 npm run build                   # tsc + vite, catches type errors
 ```
 

@@ -64,7 +64,7 @@ is attached too for Debian, Ubuntu and derivatives.
 | Fedora, Nobara | `sudo dnf install webkit2gtk4.1-devel gtk3-devel openssl-devel gcc-c++ librsvg2-devel` |
 | Bazzite, SteamOS, Silverblue | see below — these are immutable |
 
-Plus [Rust](https://rustup.rs) 1.77+ and Node.js 18+.
+Plus [Rust](https://rustup.rs) 1.88+ and Node.js 20+.
 
 **Build**
 
