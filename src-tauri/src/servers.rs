@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,6 +17,8 @@ use crate::dzsa::{self, ApiServer};
 
 /// How long the disk cache is considered fresh.
 const CACHE_TTL_SECS: u64 = 15 * 60;
+/// The list is ~26 MB; a cache file far past that is not one of ours.
+const MAX_CACHE_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,10 +50,40 @@ pub struct ServerRow {
     pub time: Option<String>,
 }
 
-impl From<&ApiServer> for ServerRow {
-    fn from(server: &ApiServer) -> Self {
+/// A server plus the strings the filter and the sort would otherwise rebuild
+/// on every keystroke.
+///
+/// Sorting 21,000 servers by name used to allocate a lowercase copy of every
+/// name O(n log n) times, and the map filter formatted the pretty name twice
+/// per comparison. Computing them once, when the list arrives, is the whole
+/// difference between a responsive search box and a stuttering one.
+#[derive(Debug, Clone)]
+pub struct StoredServer {
+    pub api: ApiServer,
+    pub id: String,
+    pub name_lower: String,
+    pub map_pretty: String,
+    pub map_lower: String,
+}
+
+impl From<ApiServer> for StoredServer {
+    fn from(api: ApiServer) -> Self {
+        let map_pretty = pretty_map(&api.map);
         Self {
-            id: server.id(),
+            id: api.id(),
+            name_lower: api.name.to_lowercase(),
+            map_lower: map_pretty.to_lowercase(),
+            map_pretty,
+            api,
+        }
+    }
+}
+
+impl From<&StoredServer> for ServerRow {
+    fn from(stored: &StoredServer) -> Self {
+        let server = &stored.api;
+        Self {
+            id: stored.id.clone(),
             name: server.name.clone(),
             ip: server.endpoint.ip.clone(),
             game_port: if server.game_port == 0 {
@@ -59,7 +92,7 @@ impl From<&ApiServer> for ServerRow {
                 server.game_port
             },
             query_port: server.endpoint.port,
-            map: pretty_map(&server.map),
+            map: stored.map_pretty.clone(),
             players: server.players,
             max_players: server.max_players,
             mod_count: server.mods.len(),
@@ -69,6 +102,12 @@ impl From<&ApiServer> for ServerRow {
             version: server.version.clone(),
             time: server.time.clone(),
         }
+    }
+}
+
+impl From<&ApiServer> for ServerRow {
+    fn from(server: &ApiServer) -> Self {
+        Self::from(&StoredServer::from(server.clone()))
     }
 }
 
@@ -132,8 +171,19 @@ pub struct ServerFilter {
     pub only_favorites: bool,
     pub favorites: Vec<String>,
     pub sort: SortBy,
+    /// Reverses the column's natural order. Players counts down by default,
+    /// names and maps count up.
+    pub sort_desc: Option<bool>,
     pub page: usize,
     pub page_size: usize,
+}
+
+impl ServerFilter {
+    /// Descending unless asked otherwise, per column.
+    fn descending(&self) -> bool {
+        self.sort_desc
+            .unwrap_or(matches!(self.sort, SortBy::Players))
+    }
 }
 
 /// Internal map names translated to the ones the community uses.
@@ -168,11 +218,11 @@ pub fn pretty_map(raw: &str) -> String {
 
 #[derive(Debug, Default)]
 pub struct ServerStore {
-    servers: Vec<ApiServer>,
+    servers: Vec<StoredServer>,
     fetched_at: u64,
 }
 
-fn now_secs() -> u64 {
+pub fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -185,6 +235,57 @@ fn cache_path() -> Option<PathBuf> {
     Some(dir.join("servers.json"))
 }
 
+/// Reads the cached body if it is fresh and plausible. Returns the body and
+/// the time it was written.
+///
+/// Separate from the store so the caller can do this on a blocking thread
+/// without holding the lock across 26 MB of file I/O and JSON parsing.
+pub fn read_cache() -> Option<(String, u64)> {
+    let path = cache_path()?;
+    let meta = fs::metadata(&path).ok()?;
+    if meta.len() > MAX_CACHE_BYTES {
+        // A body this size can only have got here by being written by
+        // something that is not us, or by an API having a very bad day.
+        let _ = fs::remove_file(&path);
+        return None;
+    }
+
+    let modified = meta
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+
+    if now_secs().saturating_sub(modified) > CACHE_TTL_SECS {
+        return None;
+    }
+
+    Some((fs::read_to_string(&path).ok()?, modified))
+}
+
+/// Writes the cache atomically. A half-written file used to be left behind for
+/// the next start to trip over.
+pub fn write_cache(body: &str) {
+    let Some(path) = cache_path() else {
+        return;
+    };
+    let tmp = path.with_extension(format!("json.{}.tmp", std::process::id()));
+
+    let write = || -> std::io::Result<()> {
+        let mut file = fs::File::create(&tmp)?;
+        file.write_all(body.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, &path)
+    };
+
+    if let Err(e) = write() {
+        let _ = fs::remove_file(&tmp);
+        eprintln!("balota: could not cache the server list: {e}");
+    }
+}
+
 impl ServerStore {
     pub fn status(&self) -> ListStatus {
         ListStatus {
@@ -194,59 +295,44 @@ impl ServerStore {
         }
     }
 
-    /// Loads the list from the disk cache when it is still fresh.
-    pub fn load_from_cache(&mut self) -> Option<ListStatus> {
-        let path = cache_path()?;
-        let modified = fs::metadata(&path)
-            .ok()?
-            .modified()
-            .ok()?
-            .duration_since(UNIX_EPOCH)
-            .ok()?
-            .as_secs();
+    /// Swaps in an already-parsed list. Parsing happens off the async runtime,
+    /// so the lock is only held for the length of a move.
+    pub fn adopt(
+        &mut self,
+        servers: Vec<ApiServer>,
+        fetched_at: u64,
+        from_cache: bool,
+    ) -> ListStatus {
+        self.servers = servers.into_iter().map(StoredServer::from).collect();
+        self.fetched_at = fetched_at;
 
-        if now_secs().saturating_sub(modified) > CACHE_TTL_SECS {
-            return None;
-        }
-
-        let body = fs::read_to_string(&path).ok()?;
-        let servers = dzsa::parse_master_list(&body).ok()?;
-
-        self.servers = servers;
-        self.fetched_at = modified;
-
-        Some(ListStatus {
+        ListStatus {
             total: self.servers.len(),
-            fetched_at: modified,
-            from_cache: true,
-        })
-    }
-
-    pub fn replace(&mut self, servers: Vec<ApiServer>, raw_body: &str) -> ListStatus {
-        self.servers = servers;
-        self.fetched_at = now_secs();
-
-        if let Some(path) = cache_path() {
-            let _ = fs::write(path, raw_body);
+            fetched_at,
+            from_cache,
         }
-
-        self.status()
     }
 
     pub fn find(&self, id: &str) -> Option<&ApiServer> {
-        self.servers.iter().find(|s| s.id() == id)
+        self.servers
+            .iter()
+            .find(|s| s.id == id)
+            .map(|stored| &stored.api)
     }
 
     /// Maps present in the list, ordered by server count.
     pub fn maps(&self) -> Vec<MapCount> {
-        let mut counts: HashMap<String, usize> = HashMap::new();
+        let mut counts: HashMap<&str, usize> = HashMap::new();
         for server in &self.servers {
-            *counts.entry(pretty_map(&server.map)).or_default() += 1;
+            *counts.entry(server.map_pretty.as_str()).or_default() += 1;
         }
 
         let mut maps: Vec<MapCount> = counts
             .into_iter()
-            .map(|(map, servers)| MapCount { map, servers })
+            .map(|(map, servers)| MapCount {
+                map: map.to_string(),
+                servers,
+            })
             .collect();
         maps.sort_by(|a, b| b.servers.cmp(&a.servers).then_with(|| a.map.cmp(&b.map)));
         maps
@@ -256,23 +342,24 @@ impl ServerStore {
         let needle = filter.search.trim().to_lowercase();
         let favorites: HashSet<&str> = filter.favorites.iter().map(String::as_str).collect();
 
-        let mut matched: Vec<&ApiServer> = self
+        let mut matched: Vec<&StoredServer> = self
             .servers
             .iter()
-            .filter(|server| {
-                if filter.only_favorites && !favorites.contains(server.id().as_str()) {
+            .filter(|stored| {
+                let server = &stored.api;
+                if filter.only_favorites && !favorites.contains(stored.id.as_str()) {
                     return false;
                 }
                 if !needle.is_empty() {
-                    let matches_name = server.name.to_lowercase().contains(&needle);
-                    let matches_ip = server.endpoint.ip.contains(&needle);
-                    let matches_map = pretty_map(&server.map).to_lowercase().contains(&needle);
-                    if !(matches_name || matches_ip || matches_map) {
+                    let matches = stored.name_lower.contains(&needle)
+                        || server.endpoint.ip.contains(&needle)
+                        || stored.map_lower.contains(&needle);
+                    if !matches {
                         return false;
                     }
                 }
                 if let Some(map) = &filter.map {
-                    if !map.is_empty() && &pretty_map(&server.map) != map {
+                    if !map.is_empty() && &stored.map_pretty != map {
                         return false;
                     }
                 }
@@ -304,20 +391,24 @@ impl ServerStore {
             })
             .collect();
 
+        // Sorted ascending first, then reversed if asked: one comparator per
+        // column instead of two.
         match filter.sort {
             SortBy::Players => matched.sort_by(|a, b| {
-                b.players
-                    .cmp(&a.players)
-                    .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                a.api
+                    .players
+                    .cmp(&b.api.players)
+                    .then_with(|| b.name_lower.cmp(&a.name_lower))
             }),
-            SortBy::Name => {
-                matched.sort_by_key(|s| s.name.to_lowercase());
-            }
+            SortBy::Name => matched.sort_by(|a, b| a.name_lower.cmp(&b.name_lower)),
             SortBy::Map => matched.sort_by(|a, b| {
-                pretty_map(&a.map)
-                    .cmp(&pretty_map(&b.map))
-                    .then_with(|| b.players.cmp(&a.players))
+                a.map_pretty
+                    .cmp(&b.map_pretty)
+                    .then_with(|| b.api.players.cmp(&a.api.players))
             }),
+        }
+        if filter.descending() {
+            matched.reverse();
         }
 
         let page_size = filter.page_size.clamp(10, 200);
@@ -338,6 +429,12 @@ impl ServerStore {
             page_size,
         }
     }
+}
+
+/// Parses a master-list body into servers. Kept here so the caller can run it
+/// on a blocking thread.
+pub fn parse(body: &str) -> Result<Vec<ApiServer>, String> {
+    dzsa::parse_master_list(body)
 }
 
 #[cfg(test)]
@@ -373,14 +470,17 @@ mod tests {
     }
 
     fn store() -> ServerStore {
-        ServerStore {
-            servers: vec![
+        let mut store = ServerStore::default();
+        store.adopt(
+            vec![
                 server("Vanilla Chernarus", 40, 60, "chernarusplus", 0, true),
                 server("Modded Livonia", 0, 40, "enoch", 12, false),
                 server("Full Sakhal", 60, 60, "sakhal", 3, false),
             ],
-            fetched_at: 0,
-        }
+            0,
+            false,
+        );
+        store
     }
 
     fn base_filter() -> ServerFilter {
@@ -470,6 +570,33 @@ mod tests {
         });
         assert_eq!(second.total, 3);
         assert!(second.items.is_empty());
+    }
+
+    /// Clicking a column header twice has to actually reverse the order — the
+    /// arrow in the table said it did long before it was true.
+    #[test]
+    fn every_column_can_be_reversed() {
+        let store = store();
+
+        let fewest_first = store.query(&ServerFilter {
+            sort: SortBy::Players,
+            sort_desc: Some(false),
+            ..base_filter()
+        });
+        assert_eq!(fewest_first.items[0].players, 0);
+
+        let by_name = store.query(&ServerFilter {
+            sort: SortBy::Name,
+            ..base_filter()
+        });
+        assert_eq!(by_name.items[0].name, "Full Sakhal");
+
+        let by_name_desc = store.query(&ServerFilter {
+            sort: SortBy::Name,
+            sort_desc: Some(true),
+            ..base_filter()
+        });
+        assert_eq!(by_name_desc.items[0].name, "Vanilla Chernarus");
     }
 
     #[test]

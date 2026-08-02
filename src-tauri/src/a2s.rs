@@ -109,6 +109,25 @@ fn parse_info(payload: &[u8], ping_ms: u32) -> Option<A2sInfo> {
     })
 }
 
+/// How many datagrams we are willing to send before giving up. Covers the
+/// challenge round trip plus ordinary UDP packet loss.
+const MAX_ATTEMPTS: u32 = 4;
+/// A server that keeps handing out challenges is not going to answer.
+const MAX_CHALLENGES: u32 = 2;
+
+/// A server that answered, but not with data we can read. It is online and its
+/// latency is known, which is all the table needs.
+fn alive_only(ping_ms: u32) -> A2sInfo {
+    A2sInfo {
+        ping_ms,
+        name: None,
+        map: None,
+        players: None,
+        max_players: None,
+        version: None,
+    }
+}
+
 /// Queries one server, solving the challenge when required.
 pub async fn query(ip: &str, query_port: u16, wait: Duration) -> Result<A2sInfo, String> {
     let mut addrs = tokio::net::lookup_host((ip, query_port))
@@ -124,28 +143,36 @@ pub async fn query(ip: &str, query_port: u16, wait: Duration) -> Result<A2sInfo,
         .await
         .map_err(|e| format!("Could not connect the socket: {e}"))?;
 
-    let started = Instant::now();
     let mut request = A2S_INFO_HEADER.to_vec();
     let mut buf = [0u8; 4096];
-    // Latency is measured on the first round trip, which is the one that
-    // reflects network distance; the challenge would add a second hop.
+    // Latency is measured on the first round trip that comes back, which is
+    // the one that reflects network distance; the challenge adds a second hop
+    // and a retry adds a whole timeout, so neither is allowed to count.
     let mut ping_ms: Option<u32> = None;
 
-    // One initial attempt plus two retries: some servers issue a fresh
-    // challenge even after being answered.
-    for _ in 0..3 {
+    let mut attempts = 0;
+    let mut challenges = 0;
+
+    while attempts < MAX_ATTEMPTS {
+        attempts += 1;
+
+        let sent_at = Instant::now();
         socket
             .send(&request)
             .await
             .map_err(|e| format!("Could not send the query: {e}"))?;
 
-        let received = timeout(wait, socket.recv(&mut buf))
-            .await
-            .map_err(|_| "No reply (timed out)".to_string())?
-            .map_err(|e| format!("Receive error: {e}"))?;
+        let received = match timeout(wait, socket.recv(&mut buf)).await {
+            // A dropped datagram is ordinary on UDP. Retrying is the whole
+            // point of having a budget of attempts; bailing out here is what
+            // used to mark healthy servers as offline on every other refresh.
+            Err(_) => continue,
+            Ok(Err(e)) => return Err(format!("Receive error: {e}")),
+            Ok(Ok(received)) => received,
+        };
 
-        let elapsed = started.elapsed().as_millis().min(u32::MAX as u128) as u32;
-        ping_ms.get_or_insert(elapsed);
+        let elapsed = sent_at.elapsed().as_millis().min(u32::MAX as u128) as u32;
+        let ping = *ping_ms.get_or_insert(elapsed);
 
         if received < 5 {
             return Err("Reply too short".into());
@@ -154,9 +181,10 @@ pub async fn query(ip: &str, query_port: u16, wait: Duration) -> Result<A2sInfo,
         let header = &buf[..4];
         if header == MULTI_PACKET {
             // Split response. Extremely rare for A2S_INFO, and reassembling it
-            // buys us nothing here: the server is alive and latency is already
-            // measured.
-            return Err("Split responses are not supported".into());
+            // buys us nothing here: the server answered, so it is online and
+            // its latency is already measured. Reporting that beats throwing
+            // the measurement away and calling it offline.
+            return Ok(alive_only(ping));
         }
         if header != SINGLE_PACKET {
             return Err("Unknown header".into());
@@ -167,24 +195,36 @@ pub async fn query(ip: &str, query_port: u16, wait: Duration) -> Result<A2sInfo,
         match payload.first() {
             // Challenge: repeat the query with the four bytes appended.
             Some(b'A') if payload.len() >= 5 => {
+                challenges += 1;
+                if challenges > MAX_CHALLENGES {
+                    return Err("Server kept asking for a challenge".into());
+                }
                 request = A2S_INFO_HEADER.to_vec();
                 request.extend_from_slice(&payload[1..5]);
             }
             Some(b'I') => {
-                let ping = ping_ms.unwrap_or(elapsed);
-                return parse_info(payload, ping).ok_or_else(|| "Unreadable reply".to_string());
+                return Ok(parse_info(payload, ping).unwrap_or_else(|| alive_only(ping)));
             }
             _ => return Err("Unexpected reply".into()),
         }
     }
 
-    Err("Server kept asking for a challenge".into())
+    Err("No reply (timed out)".into())
 }
+
+/// Upper bound on one batch. The table shows 50 rows; anything beyond this is
+/// a caller mistake, and each target holds a 4 KiB buffer while it waits.
+pub const MAX_TARGETS: usize = 256;
 
 /// Queries many servers at once. Meant for the visible page of the table, not
 /// for all 21,000 servers in the list.
-pub async fn ping_many(targets: Vec<(String, u16)>, wait_ms: u64) -> Vec<PingResult> {
+pub async fn ping_many(mut targets: Vec<(String, u16)>, wait_ms: u64) -> Vec<PingResult> {
     use tokio::sync::Semaphore;
+
+    // The same server twice on a page is one probe, not two.
+    let mut seen = std::collections::HashSet::new();
+    targets.retain(|target| seen.insert(target.clone()));
+    targets.truncate(MAX_TARGETS);
 
     let permits = std::sync::Arc::new(Semaphore::new(64));
     let wait = Duration::from_millis(wait_ms.clamp(200, 5_000));
