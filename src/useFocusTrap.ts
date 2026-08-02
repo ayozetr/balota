@@ -28,9 +28,13 @@ export function useFocusTrap<T extends HTMLElement>() {
     const previous = document.activeElement as HTMLElement | null;
 
     // Focus the first control rather than the container, so the first Tab
-    // moves on instead of entering.
-    const first = container.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? container).focus();
+    // moves on instead of entering. A dialog can nominate its own starting
+    // point with `data-autofocus` — used by the ones whose first control is
+    // not the one you want (a text field to fill in, never a Delete button).
+    const wanted =
+      container.querySelector<HTMLElement>("[data-autofocus]") ??
+      container.querySelector<HTMLElement>(FOCUSABLE);
+    (wanted ?? container).focus();
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Tab") return;
