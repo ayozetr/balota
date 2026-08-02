@@ -46,12 +46,25 @@ Steam with the symlinks Proton needs to load them.
 Grab the AppImage from the [latest release](https://github.com/ayozetr/balota/releases/latest):
 
 ```bash
-chmod +x Balota_1.0.0_amd64.AppImage
-./Balota_1.0.0_amd64.AppImage
+chmod +x Balota_1.1.0_amd64.AppImage
+./Balota_1.1.0_amd64.AppImage
 ```
 
-It bundles GTK/WebKit and needs nothing installed, so it runs on any distro. A `.deb`
-is attached too for Debian, Ubuntu and derivatives.
+It bundles GTK/WebKit and needs nothing installed, so it runs on any distro.
+
+Native packages are attached too, for people who would rather the app went through
+their package manager:
+
+```bash
+sudo apt install ./Balota_1.1.0_amd64.deb    # Debian, Ubuntu, Mint, Pop!_OS
+sudo dnf install ./Balota-1.1.0-1.x86_64.rpm # Fedora, Nobara, openSUSE
+```
+
+Every release ships a `SHA256SUMS` file. Check what you downloaded before running it:
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+```
 
 ### Build from source
 

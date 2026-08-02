@@ -5,7 +5,7 @@ All notable changes to Balota are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] — 2026-08-03
 
 Everything below came out of a full audit of the 1.0.0 codebase. The headline
 is the in-game name: the default was `Survivor`, which is exactly the name a
@@ -136,5 +136,5 @@ First public release.
 - Full keyboard and controller navigation, with Steam Deck support.
 - AppImage and `.deb` bundles.
 
-[Unreleased]: https://github.com/ayozetr/balota/compare/v1.0.0...HEAD
+[1.1.0]: https://github.com/ayozetr/balota/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ayozetr/balota/releases/tag/v1.0.0
