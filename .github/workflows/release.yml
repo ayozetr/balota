@@ -64,7 +64,7 @@ jobs:
         run: |
           mkdir -p release
           find src-tauri/target/release/bundle \
-            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
+            -name '*.AppImage' -exec cp {} release/ \;
           cd release
           sha256sum * > SHA256SUMS
           echo "--- published files ---"

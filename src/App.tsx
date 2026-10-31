@@ -145,9 +145,11 @@ export default function App() {
       refreshingNow.current = true;
       setRefreshing(true);
       try {
-        setStatus(await api.refreshServers(force));
+        const fresh = await api.refreshServers(force);
+        setStatus(fresh);
         setMaps(await api.serverMaps());
         setListError(null);
+        if (fresh.warning) notify(fresh.warning, "error");
       } catch (e) {
         // Leaving `loading` true here is what painted "Loading servers…"
         // forever when the first fetch failed.
@@ -368,8 +370,6 @@ export default function App() {
       const outcome = await api.launchGame({
         connect: details.connect,
         modIds: details.mods.map((mod) => mod.id),
-        playerName: config?.playerName,
-        extraArgs: config?.extraLaunchArgs,
       });
       setConfig(
         await api.recordLaunch(
@@ -485,6 +485,7 @@ export default function App() {
             aria-label="Support Balota on Ko-fi"
           >
             <Heart size={14} />
+            Ko-fi
           </button>
         </div>
         <div className="status-card">
@@ -688,8 +689,6 @@ export default function App() {
               await api.launchGame({
                 connect: address,
                 modIds: [],
-                playerName: config?.playerName,
-                extraArgs: config?.extraLaunchArgs,
               });
               notify(`Launching DayZ on ${address} (no mods).`);
             } catch (e) {

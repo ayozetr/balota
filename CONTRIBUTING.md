@@ -13,7 +13,7 @@ npm run app          # dev mode: Vite on :1420 + the Tauri window, both hot-relo
 ## Packaging
 
 ```bash
-npm run app:build     # .AppImage + .deb in src-tauri/target/release/bundle/
+npm run app:build     # .AppImage in src-tauri/target/release/bundle/appimage/
 ```
 
 That script exports two variables, and both are there for a reason:
@@ -25,8 +25,8 @@ That script exports two variables, and both are there for a reason:
 - `NO_STRIP=1` — sidesteps `linuxdeploy`'s stripping step, another source of opaque
   failures.
 
-The `.deb` bundler practically never fails; the AppImage step is the fragile one. To
-debug it:
+The AppImage is the only bundle Balota ships, and the AppImage step is the fragile
+one. To debug it:
 
 ```bash
 APPIMAGE_EXTRACT_AND_RUN=1 npx tauri build --bundles appimage --verbose

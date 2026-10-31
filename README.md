@@ -50,15 +50,11 @@ chmod +x Balota_1.1.0_amd64.AppImage
 ./Balota_1.1.0_amd64.AppImage
 ```
 
-It bundles GTK/WebKit and needs nothing installed, so it runs on any distro.
-
-Native packages are attached too, for people who would rather the app went through
-their package manager:
-
-```bash
-sudo apt install ./Balota_1.1.0_amd64.deb    # Debian, Ubuntu, Mint, Pop!_OS
-sudo dnf install ./Balota-1.1.0-1.x86_64.rpm # Fedora, Nobara, openSUSE
-```
+It bundles GTK/WebKit and Valve's `libsteam_api.so`, and needs nothing installed, so it
+runs on any distro. It is the only package: one build that behaves the same everywhere
+beats three that each find Steam's library in their own way. If you installed the `.deb`
+or `.rpm` of 1.1.0, remove it (`sudo apt remove balota` / `sudo dnf remove balota`) and
+switch to the AppImage.
 
 Every release ships a `SHA256SUMS` file. Check what you downloaded before running it:
 
@@ -86,7 +82,7 @@ git clone https://github.com/ayozetr/balota.git
 cd balota
 npm install
 npm run app          # run it
-npm run app:build    # AppImage + .deb in src-tauri/target/release/bundle/
+npm run app:build    # AppImage in src-tauri/target/release/bundle/appimage/
 ```
 
 The release binary is ~5 MB; the AppImage carries its own GTK/WebKit payload and needs

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How Balota works
+    url: https://github.com/ayozetr/balota/blob/main/docs/HOW-IT-WORKS.md
+    about: Server list, mod links, Proton and the Workshop helper, explained — worth a look before reporting odd behaviour.

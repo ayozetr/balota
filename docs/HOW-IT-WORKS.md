@@ -129,6 +129,39 @@ Two traps here:
   as 0. Parse by walking the fields in order; do not index into the packet by splitting
   on null bytes.
 
+### When the API is down
+
+The API is a single point of failure that the servers themselves are not: on
+2026-10-25 it stopped answering for a day while every server stayed up. Balota copes in
+two ways.
+
+- **The list.** If the download fails, the last list that was saved to
+  `~/.cache/balota/servers.json` is shown, however old, with a warning. It is normally
+  thrown away after 15 minutes.
+- **One server.** Opening a server asks the API and the server itself at the same time.
+  The API's answer is preferred (its mod names are the Workshop titles), but if it fails,
+  or has not answered two seconds after the server did, the server's own answer is used.
+
+What the server says about itself comes from two A2S queries:
+
+- **A2S_INFO** carries, after the fields above, an *extra data flag* byte. Bit `0x80`
+  adds the **game port**; bit `0x20` adds a keyword string where DayZ puts its settings:
+  `battleye`, `no3rd` (first person only), `privHive`, the in-game clock as `14:15`…
+- **A2S_RULES** (`FF FF FF FF 56`, with the same challenge dance) carries the **mod
+  list**, in DayZ's own binary format, spread over rules whose two-byte keys are
+  `[index, total]`, counting from one. Join the values in index order, *then* unescape —
+  an escape is often split across two chunks — where `01 01` is 0x01, `01 02` is 0x00 and
+  `01 03` is 0xFF. The result is:
+
+```
+<protocol:u8> <overflow:u8> <dlc:u16> <u32 per set bit of dlc>
+<mod count:u8> { <hash:u32> <id length:u8, low nibble> <workshop id, LE> <name length:u8> <name> } …
+```
+
+Bit 0 of `overflow` means the server had more mods than fit. A heavily modded server
+answers with a single datagram over 4 KB, so the receive buffer has to be sized for the
+largest UDP payload, not for a typical one.
+
 Latency is measured on the first round trip, before the challenge adds a second hop.
 
 ## 4. Launching
@@ -170,10 +203,16 @@ The client exposes no console command for it, but the Steamworks SDK does:
   session is not.
 - A crash inside Valve's library takes down the helper, not the launcher.
 
-`libsteam_api.so` is taken from the user's own Steam install (`steamrt64/`, `linux64/`),
-so nothing of Valve's has to be redistributed. The AppImage is the exception: it ships
-the redistributable copy next to the helper, because host paths may not be reachable
-from inside it.
+`libsteam_api.so` is taken from the user's own Steam install (`steamrt64/`, `linux64/`,
+`ubuntu12_64/`), so nothing of Valve's has to be redistributed. The AppImage is the
+exception: it ships the redistributable copy next to the helper, because host paths may
+not be reachable from inside it.
+
+Steam's copy is first copied, on its own, into `~/.cache/balota/steamlib/` (0700), and
+the helper's `LD_LIBRARY_PATH` points there and nowhere else in Steam. Pointing it at
+Steam's folder would make every other library in that folder win over the system's, and
+with Flatpak or Snap Steam that folder is writable from inside the sandbox — by a game, a
+mod or Proton — while the helper runs outside it.
 
 ### Downloading (the fallback)
 

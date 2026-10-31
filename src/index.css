@@ -1,7 +1,10 @@
 :root {
-  --bg: #0b0f19;
-  --bg-elevated: #121826;
-  --bg-sidebar: #080b12;
+  /* Neutral greys rather than the navy the app started with, and a true
+     black sidebar: on an OLED panel (the Steam Deck OLED among them) those
+     pixels are simply off. */
+  --bg: #18181b;
+  --bg-elevated: #232326;
+  --bg-sidebar: #000000;
   --bg-input: rgba(0, 0, 0, 0.32);
   --bg-hover: rgba(255, 255, 255, 0.045);
 
@@ -15,12 +18,12 @@
   --blue: #0a84ff;
   --yellow: #ffd60a;
 
-  --text: #eef1f6;
-  --text-muted: #93a0b5;
-  /* Was #5d6b80, which is 3.5:1 against --bg — under the 4.5:1 WCAG AA needs,
-     and it was being used at 11-12px. This is 5.5:1 and still reads as the
-     quietest of the three. */
-  --text-dim: #7d8b9f;
+  --text: #f0f0f2;
+  --text-muted: #a1a1aa;
+  /* 5.2:1 against --bg and 4.6:1 against --bg-elevated, above the 4.5:1 WCAG
+     AA needs at the 11-12px it is used at, and still the quietest of the
+     three. An earlier #5d6b80 was 3.5:1. */
+  --text-dim: #8a8a93;
 
   --radius: 10px;
   --radius-sm: 7px;
@@ -327,7 +330,7 @@ input[type="checkbox"] {
   height: 58px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
-  background: rgba(18, 24, 38, 0.55);
+  background: rgba(35, 35, 38, 0.55);
   flex-shrink: 0;
 }
 
@@ -1069,7 +1072,7 @@ input[type="checkbox"] {
   padding: 11px 16px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: #1a2130;
+  background: #2a2a2e;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
   font-size: 12.5px;
   animation: rise 0.16s ease-out;

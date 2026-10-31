@@ -19,6 +19,9 @@ export function playerNameError(name: string | undefined): string | null {
   if (/\s/.test(trimmed)) {
     return "The in-game name cannot contain spaces — DayZ would read the rest as launch parameters. Use an underscore instead.";
   }
+  if (/["\u0000-\u001f\u007f]/.test(trimmed)) {
+    return "The in-game name cannot contain quotes or control characters.";
+  }
   if (PLACEHOLDERS.includes(trimmed.toLowerCase())) {
     return `“${trimmed}” is DayZ's placeholder name and a lot of servers kick it on sight. Pick your own name.`;
   }

@@ -5,6 +5,81 @@ All notable changes to Balota are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Releases ship only the AppImage.** The `.deb` and `.rpm` are gone: the
+  AppImage carries Valve's `libsteam_api.so`, while the native packages relied
+  on finding it in the user's Steam install, which not every install has — and
+  without it subscribing fell back to plain downloads that Steam never
+  updates. If you installed the 1.1.0 `.deb` or `.rpm`, remove it and use the
+  AppImage.
+- **New colours.** The sidebar is true black, so on an OLED screen (the Steam
+  Deck OLED among them) it is simply switched off, and the rest of the window
+  is neutral grey instead of navy. Text contrast stays above WCAG AA.
+- The Ko-fi link in the sidebar now says "Ko-fi" next to its heart.
+
+### Added
+
+- **Joining works while dayzsalauncher.com is down.** Opening a server, from the
+  list, the history or direct connect, now also asks the server itself over A2S
+  for its details and mod list, and uses that answer when the API does not
+  give one. Before, a direct connect could only join with no mods, which no
+  modded server accepts.
+- **The last saved list is shown when the download fails**, however old, with a
+  warning, instead of an error screen. Connecting to an API that does not answer
+  at all now gives up after 8 seconds rather than 60.
+
+### Fixed
+
+- Most installed mods were listed as "Mod <id>": the name in `meta.cpp` was only
+  read when it was on the first line.
+- IPv6 servers could not be joined: the address was not bracketed in
+  `-connect=`.
+- Launch parameters with a quoted value containing spaces (`-profiles="/a b"`)
+  reached the game split in two.
+- The link to the controller prompts' author in the controller help never
+  opened.
+- Links in the AppImage often did not open, and Steam could be started with
+  the wrong libraries: every program Balota launched inherited the
+  `LD_LIBRARY_PATH`, `PATH` and other paths the AppImage points at its own
+  bundle, and on KDE `kde-open` died loading the bundle's libnghttp2. Host
+  programs (`xdg-open`, `steam`, `flatpak`) now get those entries removed; the
+  Workshop helper, which is part of the bundle, keeps them.
+- `npm run app` did not start: `cargo run` could not tell the app from the
+  Workshop helper.
+
+### Security
+
+- The Workshop helper no longer has Steam's library folder on its
+  `LD_LIBRARY_PATH`. With Flatpak or Snap Steam that folder is writable from
+  inside the sandbox, so a planted library there ran outside it the next time
+  mods were subscribed. Steam's `libsteam_api.so` is now copied on its own into
+  a private folder. Empty entries in an inherited `LD_LIBRARY_PATH`, which the
+  loader reads as the current directory, are dropped.
+- Servers on private, link-local, carrier-grade NAT, loopback (including
+  `::ffff:127.0.0.1`) or other non-public addresses are dropped from the master
+  list, so scrolling past one no longer sends UDP probes into the user's own
+  network. Direct connect still reaches LAN servers.
+- The in-game name and extra launch parameters are read from the saved
+  settings when launching, not from the request the interface sends, and the
+  name can no longer contain quotes or control characters.
+- `open_url` accepts only the exact links the interface uses and Workshop
+  pages by numeric id, instead of anything under steamcommunity.com and
+  github.com (steamcommunity.com has an open redirector).
+- The DayZ folder found by the `common/DayZ` fallback, and every Workshop
+  folder, must really be inside their Steam library: a link out of it no
+  longer makes Balota create links in, or delete folders from, somewhere else.
+- Lists of mod ids from the interface are capped at 500, favourites at 1,000,
+  and server ids must be real addresses; history names are truncated.
+- Overlapping writes of the server list cache can no longer corrupt it.
+- Dependencies updated for published advisories: `rustls` 0.23.46,
+  `rustls-webpki` 0.103.16, `webpki-roots` 1.0.11 and `quinn-proto` 0.11.19
+  (TLS certificate checks and handshake, HTTP/3 denial of service), `tokio`
+  1.54.1, and on the build side `vite` 6.4.5, `postcss`, `nanoid` and
+  `source-map-js`. `cargo audit` and `npm audit` report no vulnerabilities.
+
 ## [1.1.0] — 2026-08-03
 
 Everything below came out of a full audit of the 1.0.0 codebase. The headline

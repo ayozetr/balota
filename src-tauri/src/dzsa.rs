@@ -90,13 +90,32 @@ impl ApiServer {
     }
 
     /// Connection string for `-connect=`, which uses the game port.
+    ///
+    /// An IPv6 address goes in brackets: `fe80::1:2302` is not an address and
+    /// a port, it is just a longer address, and the launch refused it.
     pub fn connect_string(&self) -> String {
         let port = if self.game_port == 0 {
             self.endpoint.port
         } else {
             self.game_port
         };
-        format!("{}:{}", self.endpoint.ip, port)
+        match self.endpoint.ip.parse::<IpAddr>() {
+            Ok(IpAddr::V6(ip)) => format!("[{ip}]:{port}"),
+            _ => format!("{}:{}", self.endpoint.ip, port),
+        }
+    }
+
+    /// Whether this record points somewhere on the public internet.
+    ///
+    /// Applied to the master list only: every row there gets pinged as soon as
+    /// it scrolls into view, so an entry at `192.168.1.1` would have every
+    /// user of the launcher probing their own router. A LAN server is still
+    /// reachable through direct connect, which does not go through this.
+    pub fn is_public(&self) -> bool {
+        self.endpoint
+            .ip
+            .parse::<IpAddr>()
+            .is_ok_and(|ip| is_public_ip(ip.to_canonical()))
     }
 
     /// Whether this record can be acted on at all.
@@ -107,11 +126,51 @@ impl ApiServer {
     /// no business pointing the launcher at the machine it runs on.
     pub fn is_usable(&self) -> bool {
         match self.endpoint.ip.parse::<IpAddr>() {
+            // `::ffff:127.0.0.1` is loopback too, but `Ipv6Addr::is_loopback`
+            // only knows `::1`.
             Ok(ip) => {
+                let ip = ip.to_canonical();
                 !(ip.is_loopback() || ip.is_multicast() || ip.is_unspecified())
                     && self.endpoint.port != 0
             }
             Err(_) => false,
+        }
+    }
+}
+
+/// `IpAddr::is_global` is still unstable; this is the part of it that
+/// matters here.
+fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, c, _] = v4.octets();
+            !(v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_unspecified()
+                || v4.is_multicast()
+                || a == 0
+                || a >= 240
+                // Shared address space (carrier-grade NAT), 100.64.0.0/10.
+                || (a == 100 && (64..128).contains(&b))
+                // Benchmarking, 198.18.0.0/15.
+                || (a == 198 && (b == 18 || b == 19))
+                // IETF protocol assignments, 192.0.0.0/24.
+                || (a == 192 && b == 0 && c == 0))
+        }
+        IpAddr::V6(v6) => {
+            let first = v6.segments()[0];
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                // Unique local, fc00::/7.
+                || (first & 0xfe00) == 0xfc00
+                // Link local, fe80::/10.
+                || (first & 0xffc0) == 0xfe80
+                // Documentation, 2001:db8::/32.
+                || (first == 0x2001 && v6.segments()[1] == 0x0db8))
         }
     }
 }
@@ -180,6 +239,10 @@ fn client() -> Result<&'static reqwest::Client, String> {
                 .user_agent(USER_AGENT)
                 .gzip(true)
                 .timeout(Duration::from_secs(60))
+                // The 60 s above is for a slow 26 MB download. A host that
+                // never answers at all should not take three of those, with
+                // retries, before the cached list is shown instead.
+                .connect_timeout(Duration::from_secs(8))
                 // The API is HTTPS and stays HTTPS; a redirect to plain HTTP,
                 // or to any other host, is not something to follow silently.
                 .https_only(true)
@@ -288,7 +351,7 @@ pub fn parse_master_list(body: &str) -> Result<Vec<ApiServer>, String> {
     let servers: Vec<ApiServer> = raw
         .into_iter()
         .filter_map(|value| serde_json::from_value::<ApiServer>(value).ok())
-        .filter(ApiServer::is_usable)
+        .filter(|server| server.is_usable() && server.is_public())
         .collect();
 
     // Every single record being unreadable is a schema change, not bad luck,
@@ -431,6 +494,12 @@ mod tests {
             {"endpoint":{"ip":"../../admin","port":27016},"name":"Traversal"},
             {"endpoint":{"ip":"127.0.0.1","port":27016},"name":"Loopback"},
             {"endpoint":{"ip":"0.0.0.0","port":27016},"name":"Wildcard"},
+            {"endpoint":{"ip":"::ffff:127.0.0.1","port":27016},"name":"Mapped loopback"},
+            {"endpoint":{"ip":"192.168.1.1","port":27016},"name":"Router"},
+            {"endpoint":{"ip":"100.64.0.1","port":27016},"name":"CGNAT"},
+            {"endpoint":{"ip":"169.254.1.1","port":27016},"name":"Link local"},
+            {"endpoint":{"ip":"fd00::1","port":27016},"name":"Unique local"},
+            {"endpoint":{"ip":"::ffff:10.0.0.1","port":27016},"name":"Mapped private"},
             {"endpoint":{"ip":"evil.example.com","port":27016},"name":"Hostname"},
             {"endpoint":{"ip":"1.2.3.4","port":27016},"name":"Fine"}
         ]}"#;
@@ -438,6 +507,17 @@ mod tests {
         let servers = parse_master_list(body).expect("should parse");
         let names: Vec<&str> = servers.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["Fine"]);
+    }
+
+    #[test]
+    fn an_ipv6_connect_string_is_bracketed() {
+        let body = r#"{"status":0,"result":[
+            {"endpoint":{"ip":"2a01:4f8::1","port":27016},"gamePort":2302}
+        ]}"#;
+        let servers = parse_master_list(body).expect("should parse");
+        let connect = servers[0].connect_string();
+        assert_eq!(connect, "[2a01:4f8::1]:2302");
+        assert!(connect.parse::<std::net::SocketAddr>().is_ok());
     }
 
     #[test]
