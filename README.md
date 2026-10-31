@@ -46,8 +46,8 @@ Steam with the symlinks Proton needs to load them.
 Grab the AppImage from the [latest release](https://github.com/ayozetr/balota/releases/latest):
 
 ```bash
-chmod +x Balota_1.1.0_amd64.AppImage
-./Balota_1.1.0_amd64.AppImage
+chmod +x Balota_1.2.0_amd64.AppImage
+./Balota_1.2.0_amd64.AppImage
 ```
 
 It bundles GTK/WebKit and Valve's `libsteam_api.so`, and needs nothing installed, so it

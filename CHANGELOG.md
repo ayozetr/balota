@@ -5,7 +5,12 @@ All notable changes to Balota are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] — 2026-10-31
+
+The headline is a day in October when dayzsalauncher.com stopped answering
+while every server stayed up, and Balota could not join a single one of them.
+It now asks the servers themselves when the API is gone. Releases are also
+AppImage only from here on.
 
 ### Changed
 
@@ -211,5 +216,6 @@ First public release.
 - Full keyboard and controller navigation, with Steam Deck support.
 - AppImage and `.deb` bundles.
 
+[1.2.0]: https://github.com/ayozetr/balota/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ayozetr/balota/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ayozetr/balota/releases/tag/v1.0.0
