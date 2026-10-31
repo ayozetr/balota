@@ -31,9 +31,7 @@
   "bundle": {
     "active": true,
     "targets": [
-      "appimage",
-      "deb",
-      "rpm"
+      "appimage"
     ],
     "externalBin": [
       "binaries/balota-workshop"

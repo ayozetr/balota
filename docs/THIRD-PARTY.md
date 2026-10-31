@@ -14,10 +14,10 @@ manifests under `node_modules` after changing dependencies.
 covered by Balota's licence. It is used through the `steamworks` crate to subscribe and
 unsubscribe Workshop items.
 
-Balota reads it from the user's own Steam installation, so building from source and the
-`.deb` package redistribute nothing of Valve's. The AppImage is the exception: it ships
-Valve's redistributable copy next to the helper binary, which is what the additional
-permission in LICENSE exists to allow.
+Run from source (`npm run app`), Balota reads it from the user's own Steam installation
+and redistributes nothing of Valve's. The AppImage — the only package that is released —
+ships Valve's redistributable copy next to the helper binary, which is what the
+additional permission in LICENSE exists to allow.
 
 ## Rust crates
 
