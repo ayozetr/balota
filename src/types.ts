@@ -101,6 +101,8 @@ export interface ListStatus {
   total: number;
   fetchedAt: number;
   fromCache: boolean;
+  /** Set when the download failed and an older list is shown instead. */
+  warning?: string;
 }
 
 export interface MapCount {
@@ -191,8 +193,6 @@ export interface ServerFilter {
 export interface LaunchRequest {
   connect?: string;
   modIds: number[];
-  playerName?: string;
-  extraArgs?: string;
   dryRun?: boolean;
 }
 

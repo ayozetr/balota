@@ -111,6 +111,17 @@ async fn steam_environment(
 // Server list
 // ---------------------------------------------------------------------------
 
+/// Reads and parses the disk cache off the async runtime: doing 26 MB of it
+/// there, with the store's write lock held, blocked every other query.
+async fn load_cache(fresh_only: bool) -> Result<Option<(Vec<dzsa::ApiServer>, u64)>, String> {
+    tokio::task::spawn_blocking(move || {
+        servers::read_cache(fresh_only)
+            .and_then(|(body, modified)| servers::parse(&body).ok().map(|list| (list, modified)))
+    })
+    .await
+    .map_err(|e| format!("Could not read the cached list: {e}"))
+}
+
 #[tauri::command]
 async fn refresh_servers(state: State<'_, AppState>, force: bool) -> Result<ListStatus, String> {
     // A refresh already running is not an error: holding F5 should be a no-op,
@@ -120,22 +131,32 @@ async fn refresh_servers(state: State<'_, AppState>, force: bool) -> Result<List
     };
 
     if !force {
-        // Reading and parsing 26 MB on the async runtime, with the store's
-        // write lock held, blocked every other query behind it.
-        let cached = tokio::task::spawn_blocking(|| {
-            servers::read_cache().and_then(|(body, modified)| {
-                servers::parse(&body).ok().map(|list| (list, modified))
-            })
-        })
-        .await
-        .map_err(|e| format!("Could not read the cached list: {e}"))?;
-
-        if let Some((list, modified)) = cached {
+        if let Some((list, modified)) = load_cache(true).await? {
             return Ok(state.store.write().await.adopt(list, modified, true));
         }
     }
 
-    let (list, body) = dzsa::fetch_master_list().await?;
+    let (list, body) = match dzsa::fetch_master_list().await {
+        Ok(fetched) => fetched,
+        // The API being down says nothing about the servers, which are almost
+        // always still up. Keep whatever list there is instead of replacing
+        // it with an error screen: the one already in memory if there is
+        // one, otherwise the disk cache however old it is.
+        Err(e) => {
+            let note = format!("{e} Showing the last list that could be downloaded.");
+            if !state.store.read().await.is_empty() {
+                let mut status = state.store.read().await.status();
+                status.warning = Some(note);
+                return Ok(status);
+            }
+            if let Some((list, modified)) = load_cache(false).await? {
+                let mut status = state.store.write().await.adopt(list, modified, true);
+                status.warning = Some(note);
+                return Ok(status);
+            }
+            return Err(e);
+        }
+    };
     let count = list.len();
     let status = state
         .store
@@ -165,6 +186,87 @@ async fn server_maps(state: State<'_, AppState>) -> Result<Vec<MapCount>, String
     Ok(state.store.read().await.maps())
 }
 
+/// Splits an `ip:query_port` server id, refusing anything that is not one.
+fn parse_server_id(id: &str) -> Result<(String, u16), String> {
+    let (ip, query_port) = id
+        .rsplit_once(':')
+        .and_then(|(ip, port)| Some((ip.to_string(), port.parse::<u16>().ok()?)))
+        .ok_or_else(|| format!("`{id}` is not a valid ip:port address"))?;
+    ip.parse::<std::net::IpAddr>()
+        .map_err(|_| format!("`{ip}` is not a valid IP address"))?;
+    Ok((ip, query_port))
+}
+
+/// More mod ids than any server has ever needed. Every list of them that comes
+/// from the interface is held to it: they end up on a command line, and an
+/// unbounded one fails to spawn at all.
+const MAX_IDS: usize = 500;
+
+fn check_ids(ids: &[u64]) -> Result<(), String> {
+    if ids.len() > MAX_IDS {
+        return Err(format!(
+            "Too many mods at once ({}, at most {MAX_IDS}).",
+            ids.len()
+        ));
+    }
+    Ok(())
+}
+
+/// Favourites are kept in the config file, which is rewritten on every star.
+const MAX_FAVORITES: usize = 1_000;
+
+/// How long dayzsalauncher.com gets to answer once the server itself already
+/// has. Its mod names are the Workshop titles, which read better than the
+/// internal ones a server reports, but not at the price of a long wait.
+const API_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Looks a server up through dayzsalauncher.com and, at the same time, by
+/// asking the server directly over A2S. The API is preferred; the direct
+/// answer is what makes joining possible while the API is down, which it was
+/// for a whole day once while every server stayed up.
+///
+/// Returns the server and, when the direct answer was used, a note saying so.
+async fn live_lookup(
+    ip: &str,
+    query_port: u16,
+) -> Result<(dzsa::ApiServer, Option<String>), String> {
+    let api = dzsa::query_server(ip, query_port);
+    let direct = a2s::lookup(ip, query_port);
+    tokio::pin!(api, direct);
+
+    let note = |truncated: bool| {
+        let mut note = "dayzsalauncher.com did not answer, so these details come straight from \
+                        the server."
+            .to_string();
+        if truncated {
+            note.push_str(
+                " It has more mods than it can announce, so some are missing from this list.",
+            );
+        }
+        Some(note)
+    };
+
+    tokio::select! {
+        result = &mut api => match result {
+            Ok(server) => Ok((server, None)),
+            Err(api_error) => match direct.await {
+                Ok((server, truncated)) => Ok((server, note(truncated))),
+                Err(direct_error) => Err(format!("{api_error}; asking the server directly: {direct_error}")),
+            },
+        },
+        result = &mut direct => match result {
+            Ok((server, truncated)) => match tokio::time::timeout(API_GRACE, &mut api).await {
+                Ok(Ok(from_api)) => Ok((from_api, None)),
+                _ => Ok((server, note(truncated))),
+            },
+            Err(direct_error) => api
+                .await
+                .map(|server| (server, None))
+                .map_err(|api_error| format!("{api_error}; asking the server directly: {direct_error}")),
+        },
+    }
+}
+
 /// Details for one server, by `ip:query_port`.
 ///
 /// The ID does not have to be in the master list: history entries and direct
@@ -175,14 +277,8 @@ async fn server_details(
     id: String,
     refresh: bool,
 ) -> Result<ServerDetails, String> {
-    let (ip, query_port) = id
-        .rsplit_once(':')
-        .and_then(|(ip, port)| Some((ip.to_string(), port.parse::<u16>().ok()?)))
-        .ok_or_else(|| format!("`{id}` is not a valid ip:port address"))?;
-
     // The address reaches a URL path and, later, the game's command line.
-    ip.parse::<std::net::IpAddr>()
-        .map_err(|_| format!("`{ip}` is not a valid IP address"))?;
+    let (ip, query_port) = parse_server_id(&id)?;
 
     let cached = state.store.read().await.find(&id).cloned();
 
@@ -194,17 +290,20 @@ async fn server_details(
         // Not in the list: a live lookup is the only way to get anything.
         None => {
             live = true;
-            dzsa::query_server(&ip, query_port).await.map_err(|e| {
+            let (server, note) = live_lookup(&ip, query_port).await.map_err(|e| {
                 format!("{id} is not in the server list and did not answer a lookup: {e}")
-            })?
+            })?;
+            warning = note;
+            server
         }
     };
 
     if refresh && !live {
-        match dzsa::query_server(&ip, query_port).await {
-            Ok(fresh) => {
+        match live_lookup(&ip, query_port).await {
+            Ok((fresh, note)) => {
                 server = fresh;
                 live = true;
+                warning = note;
             }
             Err(e) => warning = Some(format!("Live lookup failed ({e}). Showing cached data.")),
         }
@@ -301,6 +400,7 @@ async fn subscribe_mods(
     state: State<'_, AppState>,
     ids: Vec<u64>,
 ) -> Result<ModActionResult, String> {
+    check_ids(&ids)?;
     let env = current_env(&state).await;
     let total = ids.len();
 
@@ -358,6 +458,7 @@ async fn mod_states(
     state: State<'_, AppState>,
     ids: Vec<u64>,
 ) -> Result<Vec<steam::ItemState>, String> {
+    check_ids(&ids)?;
     let env = current_env(&state).await;
 
     tokio::task::spawn_blocking(move || steam::workshop_states(&env, &ids))
@@ -372,6 +473,7 @@ async fn mod_sizes(
     state: State<'_, AppState>,
     ids: Vec<u64>,
 ) -> Result<steam::ModInfoReply, String> {
+    check_ids(&ids)?;
     let env = current_env(&state).await;
 
     tokio::task::spawn_blocking(move || steam::workshop_info(&env, &ids))
@@ -383,6 +485,7 @@ async fn mod_sizes(
 /// because there is no subscription to drop.
 #[tauri::command]
 async fn delete_mods(state: State<'_, AppState>, ids: Vec<u64>) -> Result<usize, String> {
+    check_ids(&ids)?;
     let dirs = workshop_dirs(&state).await;
 
     tokio::task::spawn_blocking(move || steam::delete_mod_folders(&dirs, &ids))
@@ -393,6 +496,7 @@ async fn delete_mods(state: State<'_, AppState>, ids: Vec<u64>) -> Result<usize,
 /// Drops the subscription for these mods. Steam removes the files itself.
 #[tauri::command]
 async fn unsubscribe_mods(state: State<'_, AppState>, ids: Vec<u64>) -> Result<usize, String> {
+    check_ids(&ids)?;
     let env = current_env(&state).await;
 
     let outcome = tokio::task::spawn_blocking(move || steam::workshop_action(&env, false, &ids))
@@ -405,6 +509,7 @@ async fn unsubscribe_mods(state: State<'_, AppState>, ids: Vec<u64>) -> Result<u
 /// Which of these mods are on disk right now. Polled while a download runs.
 #[tauri::command]
 async fn mods_installed(state: State<'_, AppState>, ids: Vec<u64>) -> Result<Vec<u64>, String> {
+    check_ids(&ids)?;
     let dirs = workshop_dirs(&state).await;
 
     tokio::task::spawn_blocking(move || steam::installed_ids(&dirs, &ids))
@@ -433,8 +538,13 @@ async fn prune_symlinks(state: State<'_, AppState>) -> Result<Vec<String>, Strin
 #[tauri::command]
 async fn launch_game(
     state: State<'_, AppState>,
-    request: LaunchRequest,
+    mut request: LaunchRequest,
 ) -> Result<LaunchOutcome, String> {
+    {
+        let config = state.config.lock().await;
+        request.player_name = Some(config.player_name.clone());
+        request.extra_args = Some(config.extra_launch_args.clone());
+    }
     let env = current_env(&state).await;
     tokio::task::spawn_blocking(move || steam::launch(&env, &request))
         .await
@@ -489,6 +599,13 @@ async fn save_settings(
 #[tauri::command]
 async fn toggle_favorite(state: State<'_, AppState>, id: String) -> Result<AppConfig, String> {
     let mut config = state.config.lock().await;
+    // Removing is always allowed, so a bad entry from an older version can go.
+    if !config.favorites.contains(&id) {
+        parse_server_id(&id)?;
+        if config.favorites.len() >= MAX_FAVORITES {
+            return Err(format!("At most {MAX_FAVORITES} favourites."));
+        }
+    }
     config.toggle_favorite(&id);
     config::save(&config)?;
     Ok(config.clone())
@@ -501,6 +618,10 @@ async fn record_launch(
     name: String,
     map: String,
 ) -> Result<AppConfig, String> {
+    parse_server_id(&id)?;
+    // Server names are third-party text; the history only needs to show them.
+    let name: String = name.chars().take(256).collect();
+    let map: String = map.chars().take(64).collect();
     let mut config = state.config.lock().await;
     config.record_launch(&id, &name, &map);
     config::save(&config)?;

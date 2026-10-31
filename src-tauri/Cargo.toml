@@ -13,6 +13,9 @@ authors = ["Ayoze Torres"]
 license = "GPL-3.0-or-later WITH Steamworks-exception"
 edition = "2021"
 rust-version = "1.88"
+# `default-members` above gives a bare `cargo run` two binaries to choose from,
+# which is what `tauri dev` runs: `npm run app` stopped starting the app at all.
+default-run = "balota"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

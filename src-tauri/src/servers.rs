@@ -27,6 +27,10 @@ pub struct ListStatus {
     /// Download time, in seconds since the Unix epoch.
     pub fetched_at: u64,
     pub from_cache: bool,
+    /// Set when the list could not be downloaded and an older copy is being
+    /// shown instead, so the interface can say so rather than look current.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 /// Trimmed-down server record: what the table needs, without dragging along
@@ -235,12 +239,16 @@ fn cache_path() -> Option<PathBuf> {
     Some(dir.join("servers.json"))
 }
 
-/// Reads the cached body if it is fresh and plausible. Returns the body and
-/// the time it was written.
+/// Reads the cached body if it is plausible and, with `fresh_only`, fresh.
+/// Returns the body and the time it was written.
 ///
 /// Separate from the store so the caller can do this on a blocking thread
 /// without holding the lock across 26 MB of file I/O and JSON parsing.
-pub fn read_cache() -> Option<(String, u64)> {
+///
+/// A stale copy is still worth having: when dayzsalauncher.com is down, a list
+/// from yesterday beats an empty window, since the servers themselves are
+/// usually still up.
+pub fn read_cache(fresh_only: bool) -> Option<(String, u64)> {
     let path = cache_path()?;
     let meta = fs::metadata(&path).ok()?;
     if meta.len() > MAX_CACHE_BYTES {
@@ -257,7 +265,7 @@ pub fn read_cache() -> Option<(String, u64)> {
         .ok()?
         .as_secs();
 
-    if now_secs().saturating_sub(modified) > CACHE_TTL_SECS {
+    if fresh_only && now_secs().saturating_sub(modified) > CACHE_TTL_SECS {
         return None;
     }
 
@@ -267,6 +275,13 @@ pub fn read_cache() -> Option<(String, u64)> {
 /// Writes the cache atomically. A half-written file used to be left behind for
 /// the next start to trip over.
 pub fn write_cache(body: &str) {
+    // Two refreshes can finish close enough together for their writes to
+    // overlap, and they share the temporary file name below.
+    static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = WRITING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     let Some(path) = cache_path() else {
         return;
     };
@@ -292,6 +307,7 @@ impl ServerStore {
             total: self.servers.len(),
             fetched_at: self.fetched_at,
             from_cache: false,
+            warning: None,
         }
     }
 
@@ -310,7 +326,12 @@ impl ServerStore {
             total: self.servers.len(),
             fetched_at,
             from_cache,
+            warning: None,
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.servers.is_empty()
     }
 
     pub fn find(&self, id: &str) -> Option<&ApiServer> {

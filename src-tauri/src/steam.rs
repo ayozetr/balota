@@ -131,6 +131,22 @@ pub fn split_args(input: &str) -> Vec<String> {
     out
 }
 
+/// Puts quotes back around a value with whitespace in it.
+///
+/// Steam joins everything after `-applaunch` into one command line before the
+/// game sees it, so `-profiles=/a b` arrived as `-profiles=/a` and `b`. The
+/// game parses that line the Windows way, where `-profiles="/a b"` is one
+/// argument again.
+fn requote(arg: &str) -> String {
+    if !arg.chars().any(char::is_whitespace) {
+        return arg.to_string();
+    }
+    match arg.split_once('=') {
+        Some((key, value)) => format!("{key}=\"{value}\""),
+        None => format!("\"{arg}\""),
+    }
+}
+
 /// Why this in-game name will not do, if it will not do.
 ///
 /// An empty name leaves DayZ to invent one, and the placeholders are the exact
@@ -148,6 +164,11 @@ pub fn name_error(name: &str) -> Option<String> {
              parameters. Use an underscore instead."
                 .to_string(),
         );
+    }
+    // A quote cannot add a parameter on its own, but it can open a quoted run
+    // that swallows every parameter after it into the name.
+    if trimmed.chars().any(|c| c == '"' || c.is_control()) {
+        return Some("The in-game name cannot contain quotes or control characters.".to_string());
     }
     if PLACEHOLDER_NAMES.contains(&trimmed.to_lowercase().as_str()) {
         return Some(format!(
@@ -176,7 +197,7 @@ fn sanitize_name(raw: &str) -> Option<String> {
         .trim()
         .chars()
         .map(|c| if c.is_whitespace() { '_' } else { c })
-        .filter(|c| !c.is_control())
+        .filter(|c| !c.is_control() && *c != '"')
         .collect();
 
     let cleaned = cleaned.trim_matches('_').to_string();
@@ -329,8 +350,11 @@ fn dayz_in_library(library: &Path) -> Option<PathBuf> {
         }
     }
 
+    // Held to the same standard as the manifest's folder: `common/DayZ` can be
+    // a link out of the library, and Balota creates and prunes links in it.
     let fallback = steamapps.join("common/DayZ");
-    (fallback.is_dir() && looks_like_dayz(&fallback)).then_some(fallback)
+    (fallback.is_dir() && looks_like_dayz(&fallback) && inside(&fallback, &steamapps))
+        .then_some(fallback)
 }
 
 /// True when `child` really lives under `parent` once symlinks are resolved.
@@ -342,9 +366,12 @@ fn inside(child: &Path, parent: &Path) -> bool {
     }
 }
 
+/// The library's DayZ Workshop folder, as long as it really is inside the
+/// library. Mods get deleted from here, and a `221100` (or `workshop`) that is
+/// a link to `$HOME` would make every numbered folder there look like a mod.
 fn workshop_in_library(library: &Path) -> Option<PathBuf> {
     let path = library.join("steamapps/workshop/content").join(DAYZ_APP_ID);
-    path.is_dir().then_some(path)
+    (path.is_dir() && inside(&path, &library.join("steamapps"))).then_some(path)
 }
 
 /// Every Workshop folder that exists **right now**, the game's library first.
@@ -388,8 +415,58 @@ struct Candidate {
     dayz: Option<PathBuf>,
 }
 
+/// A command for a program that belongs to the host, not to Balota.
+///
+/// Inside an AppImage, `AppRun` points `LD_LIBRARY_PATH`, `PATH`,
+/// `QT_PLUGIN_PATH`, `PYTHONHOME` and a dozen others into the bundle, and every
+/// child inherits them. The host's `kde-open` then loaded the bundle's old
+/// libnghttp2 and died on a missing symbol, so no link ever reached the
+/// browser. Each such variable gets its bundle entries removed, and is dropped
+/// when nothing else is left. The Workshop helper is part of the bundle and
+/// keeps the environment as it is.
+fn host_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    if let Some(appdir) = std::env::var_os("APPDIR") {
+        for (key, value) in host_env_changes(&PathBuf::from(appdir), std::env::vars_os()) {
+            match value {
+                Some(value) => command.env(key, value),
+                None => command.env_remove(key),
+            };
+        }
+    }
+    command
+}
+
+/// The variables to change for a host program: `Some` with what is left of a
+/// path list once the bundle's entries are gone, `None` to remove it.
+fn host_env_changes(
+    appdir: &Path,
+    vars: impl Iterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(std::ffi::OsString, Option<std::ffi::OsString>)> {
+    let mut changes = Vec::new();
+    for (key, value) in vars {
+        if key == "APPDIR" || key == "APPIMAGE" || key == "ARGV0" {
+            changes.push((key, None));
+            continue;
+        }
+        let entries: Vec<PathBuf> = std::env::split_paths(&value).collect();
+        if !entries.iter().any(|entry| entry.starts_with(appdir)) {
+            continue;
+        }
+        let kept: Vec<PathBuf> = entries
+            .into_iter()
+            .filter(|entry| !entry.starts_with(appdir) && !entry.as_os_str().is_empty())
+            .collect();
+        let rebuilt = (!kept.is_empty())
+            .then(|| std::env::join_paths(kept).ok())
+            .flatten();
+        changes.push((key, rebuilt));
+    }
+    changes
+}
+
 fn process_running(name: &str) -> bool {
-    Command::new("pgrep")
+    host_command("pgrep")
         .args(["-x", name])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -399,7 +476,7 @@ fn process_running(name: &str) -> bool {
 }
 
 fn flatpak_steam_running() -> bool {
-    Command::new("flatpak")
+    host_command("flatpak")
         .arg("ps")
         .output()
         .map(|out| String::from_utf8_lossy(&out.stdout).contains(FLATPAK_STEAM_ID))
@@ -778,7 +855,11 @@ fn mod_name_from_meta(meta_path: &Path) -> Option<String> {
         let line = line.trim();
         // `starts_with("name")` also matched `nameExtra`; the key is followed
         // by whitespace or `=`.
-        let rest = line.strip_prefix("name")?;
+        // `continue`, not `?`: most meta.cpp files open with `protocol = …`,
+        // and bailing out on the first other key named every mod "Mod <id>".
+        let Some(rest) = line.strip_prefix("name") else {
+            continue;
+        };
         if !rest.starts_with(|c: char| c.is_whitespace() || c == '=') {
             continue;
         }
@@ -861,7 +942,11 @@ pub struct LaunchRequest {
     pub connect: Option<String>,
     #[serde(default)]
     pub mod_ids: Vec<u64>,
+    /// Filled in from the saved settings, never taken from the interface: a
+    /// request is only ever where the game connects and which mods it loads.
+    #[serde(skip_deserializing)]
     pub player_name: Option<String>,
+    #[serde(skip_deserializing)]
     pub extra_args: Option<String>,
     /// When `true`, returns the command without running it.
     #[serde(default)]
@@ -942,13 +1027,13 @@ pub fn launch(env: &SteamEnvironment, req: &LaunchRequest) -> Result<LaunchOutco
     args.push(format!("-name={player_name}"));
 
     if let Some(extra) = req.extra_args.as_deref() {
-        args.extend(split_args(extra));
+        args.extend(split_args(extra).iter().map(|arg| requote(arg)));
     }
 
     let command = format!("{program} {}", args.join(" "));
 
     if !req.dry_run {
-        let mut child = Command::new(program)
+        let mut child = host_command(program)
             .args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1014,7 +1099,7 @@ pub fn download_workshop_items(env: &SteamEnvironment, mod_ids: &[u64]) -> Resul
         args.push(id.to_string());
     }
 
-    let mut child = Command::new(program)
+    let mut child = host_command(program)
         .args(&args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -1070,43 +1155,111 @@ fn helper_path() -> Option<PathBuf> {
     helper_in(exe.parent()?)
 }
 
-/// Where to find `libsteam_api.so`.
+/// Where to find `libsteam_api.so`: one directory, never a list.
 ///
 /// The copy shipped next to the helper comes first: inside an AppImage it lives
 /// on read-only squashfs and is the one this build was tested against. The
-/// user's Steam install is the fallback, which is what lets a `.deb` or a
-/// source build work without redistributing Valve's library at all.
-fn steam_lib_dirs(env: &SteamEnvironment, helper: &Path) -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
+/// AppImage is the only package released; the user's Steam install is the
+/// fallback for running from source, and for anyone bundling a `.deb` of
+/// their own.
+///
+/// That fallback is copied into a private folder first. Pointing
+/// `LD_LIBRARY_PATH` at Steam's own `ubuntu12_64` put every other library in
+/// there ahead of the system's for the helper, and with Flatpak or Snap Steam
+/// that folder is writable by anything running inside the sandbox — a game, a
+/// mod, Proton — while the helper runs outside it. A planted `libgcc_s.so.1`
+/// was enough to get out. The copy closes that; what it cannot close is
+/// Steamworks itself loading `steamclient.so` from the running Steam, which is
+/// what talking to Steam at all requires.
+fn steam_lib_dir(env: &SteamEnvironment, helper: &Path) -> Result<PathBuf, String> {
+    let has_lib = |dir: &Path| dir.join("libsteam_api.so").is_file();
 
     if let Some(helper_dir) = helper.parent() {
-        dirs.push(helper_dir.to_path_buf());
         // `.deb` layout puts the helper in `lib/balota/`, so the library sits
         // one level up. The old `../lib` resolved to `lib/lib` there — a path
         // that has never existed — and only worked for the AppImage, which is
         // also the only layout the test covered.
-        dirs.push(helper_dir.join(".."));
-        dirs.push(helper_dir.join("../lib"));
+        for dir in [
+            helper_dir.to_path_buf(),
+            helper_dir.join(".."),
+            helper_dir.join("../lib"),
+        ] {
+            if has_lib(&dir) {
+                return Ok(dir);
+            }
+        }
     }
 
-    if let Some(root) = &env.steam_root {
-        let root = Path::new(root);
-        dirs.push(root.join("steamrt64"));
-        dirs.push(root.join("linux64"));
-        dirs.push(root.join("ubuntu12_64"));
+    let root = env
+        .steam_root
+        .as_deref()
+        .map(Path::new)
+        .ok_or("Could not find libsteam_api.so in the Steam installation")?;
+    let source = ["steamrt64", "linux64", "ubuntu12_64"]
+        .iter()
+        .map(|sub| root.join(sub))
+        .find(|dir| has_lib(dir))
+        .ok_or("Could not find libsteam_api.so in the Steam installation")?;
+
+    let private = dirs::cache_dir()
+        .ok_or("No cache folder to put libsteam_api.so in")?
+        .join("balota/steamlib");
+    private_copy(&source.join("libsteam_api.so"), &private)
+}
+
+/// Copies Steam's `libsteam_api.so` into `dir` (0700), alone, and returns
+/// that folder.
+fn private_copy(library: &Path, dir: &Path) -> Result<PathBuf, String> {
+    use std::io::Write;
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+        .map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
+
+    // An existing folder keeps whatever mode it had; insist on ours, and on it
+    // being a real folder rather than a link somewhere else.
+    let meta = fs::symlink_metadata(dir).map_err(|e| e.to_string())?;
+    if !meta.is_dir() {
+        return Err(format!("{} is not a folder", dir.display()));
+    }
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).map_err(|e| e.to_string())?;
+
+    let bytes = fs::read(library).map_err(|e| format!("Could not read libsteam_api.so: {e}"))?;
+    let target = dir.join("libsteam_api.so");
+    if fs::read(&target).ok().as_deref() != Some(bytes.as_slice()) {
+        let tmp = dir.join(format!("libsteam_api.so.{}.tmp", std::process::id()));
+        let write = || -> std::io::Result<()> {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&tmp)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            fs::rename(&tmp, &target)
+        };
+        if let Err(e) = write() {
+            let _ = fs::remove_file(&tmp);
+            return Err(format!("Could not copy libsteam_api.so: {e}"));
+        }
     }
 
-    dirs.retain(|dir| dir.join("libsteam_api.so").is_file());
-    dirs
+    Ok(dir.to_path_buf())
 }
 
 /// `LD_LIBRARY_PATH` for the helper, keeping whatever the environment already
 /// had. Replacing it outright breaks the helper when Balota is started from
 /// Steam, which puts the Steam Runtime on that path.
-fn helper_library_path(lib_dirs: &[PathBuf]) -> Result<std::ffi::OsString, String> {
-    let mut dirs: Vec<PathBuf> = lib_dirs.to_vec();
+///
+/// Empty entries are dropped: the loader reads `a::b` or a trailing `:` as
+/// "the current directory".
+fn helper_library_path(lib_dir: &Path) -> Result<std::ffi::OsString, String> {
+    let mut dirs: Vec<PathBuf> = vec![lib_dir.to_path_buf()];
     if let Some(existing) = std::env::var_os("LD_LIBRARY_PATH") {
-        dirs.extend(std::env::split_paths(&existing));
+        dirs.extend(std::env::split_paths(&existing).filter(|dir| !dir.as_os_str().is_empty()));
     }
     std::env::join_paths(dirs).map_err(|e| e.to_string())
 }
@@ -1126,10 +1279,7 @@ pub fn workshop_action(
     }
 
     let helper = helper_path().ok_or("The balota-workshop helper is missing")?;
-    let lib_dirs = steam_lib_dirs(env, &helper);
-    if lib_dirs.is_empty() {
-        return Err("Could not find libsteam_api.so in the Steam installation".to_string());
-    }
+    let lib_dir = steam_lib_dir(env, &helper)?;
 
     let mut command = Command::new(helper);
     command
@@ -1139,7 +1289,7 @@ pub fn workshop_action(
             "unsubscribe"
         })
         .args(mod_ids.iter().map(u64::to_string))
-        .env("LD_LIBRARY_PATH", helper_library_path(&lib_dirs)?)
+        .env("LD_LIBRARY_PATH", helper_library_path(&lib_dir)?)
         .stdin(Stdio::null())
         .stderr(Stdio::null());
 
@@ -1188,15 +1338,12 @@ pub fn workshop_states(env: &SteamEnvironment, mod_ids: &[u64]) -> Result<Vec<It
     }
 
     let helper = helper_path().ok_or("The balota-workshop helper is missing")?;
-    let lib_dirs = steam_lib_dirs(env, &helper);
-    if lib_dirs.is_empty() {
-        return Err("Could not find libsteam_api.so in the Steam installation".to_string());
-    }
+    let lib_dir = steam_lib_dir(env, &helper)?;
 
     let output = Command::new(helper)
         .arg("state")
         .args(mod_ids.iter().map(u64::to_string))
-        .env("LD_LIBRARY_PATH", helper_library_path(&lib_dirs)?)
+        .env("LD_LIBRARY_PATH", helper_library_path(&lib_dir)?)
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -1244,15 +1391,12 @@ pub fn workshop_info(env: &SteamEnvironment, mod_ids: &[u64]) -> Result<ModInfoR
     }
 
     let helper = helper_path().ok_or("The balota-workshop helper is missing")?;
-    let lib_dirs = steam_lib_dirs(env, &helper);
-    if lib_dirs.is_empty() {
-        return Err("Could not find libsteam_api.so in the Steam installation".to_string());
-    }
+    let lib_dir = steam_lib_dir(env, &helper)?;
 
     let output = Command::new(helper)
         .arg("info")
         .args(mod_ids.iter().map(u64::to_string))
-        .env("LD_LIBRARY_PATH", helper_library_path(&lib_dirs)?)
+        .env("LD_LIBRARY_PATH", helper_library_path(&lib_dir)?)
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -1324,29 +1468,37 @@ pub fn installed_ids(workshop_dirs: &[PathBuf], mod_ids: &[u64]) -> Vec<u64> {
         .collect()
 }
 
-/// Opens a URL in the browser or in the Steam client. Only the schemes and
-/// hosts the app actually needs are allowed through.
-pub fn open_url(url: &str) -> Result<(), String> {
-    // Every call site is a constant or a Workshop id, so the allowlist can be
-    // this narrow. It exists so a future bug cannot turn into "open anything".
-    const ALLOWED_HOSTS: [&str; 4] = [
-        "https://github.com/",
-        "https://ko-fi.com/",
-        "https://steamcommunity.com/",
-        "https://www.gnu.org/",
-    ];
-    const ALLOWED_STEAM: [&str; 3] = [
-        "steam://gameproperties/",
-        "steam://open/downloads",
-        "steam://url/CommunityFilePage/",
-    ];
+/// Every URL the interface opens, exactly. A prefix per host used to be
+/// enough to get anything on steamcommunity.com through, including its
+/// `/linkfilter/?url=` redirector to any site at all.
+const ALLOWED_URLS: [&str; 5] = [
+    "https://github.com/ayozetr/balota",
+    "https://github.com/ayozetr/balota/blob/main/LICENSE",
+    "https://ko-fi.com/ayozetr",
+    "https://kenney.nl/assets/input-prompts",
+    "steam://gameproperties/221100",
+];
 
-    let allowed = ALLOWED_HOSTS.iter().chain(ALLOWED_STEAM.iter());
-    if !allowed.into_iter().any(|prefix| url.starts_with(prefix)) {
+/// Whether the interface is allowed to open this URL: one of the fixed links,
+/// or the Workshop page of a mod, by numeric id and nothing else.
+fn url_allowed(url: &str) -> bool {
+    if ALLOWED_URLS.contains(&url) {
+        return true;
+    }
+    url.strip_prefix("https://steamcommunity.com/sharedfiles/filedetails/?id=")
+        .is_some_and(|id| {
+            !id.is_empty() && id.len() <= 20 && id.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+/// Opens a URL in the browser or in the Steam client. Only the URLs the app
+/// actually uses are allowed through.
+pub fn open_url(url: &str) -> Result<(), String> {
+    if !url_allowed(url) {
         return Err(format!("URL not allowed: {url}"));
     }
 
-    let mut child = Command::new("xdg-open")
+    let mut child = host_command("xdg-open")
         .arg(url)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -1407,6 +1559,20 @@ mod tests {
         // Right scheme, wrong host: still refused.
         assert!(open_url("https://evil.example.com/").is_err());
         assert!(open_url("steam://run/730").is_err());
+        // Right host, any path: refused unless it is a mod page.
+        assert!(!url_allowed(
+            "https://steamcommunity.com/linkfilter/?url=https://evil.example.com"
+        ));
+        assert!(!url_allowed(
+            "https://steamcommunity.com/sharedfiles/filedetails/?id=1&url=x"
+        ));
+        assert!(!url_allowed("https://github.com/someone-else"));
+        assert!(url_allowed(
+            "https://steamcommunity.com/sharedfiles/filedetails/?id=1559212036"
+        ));
+        for url in ALLOWED_URLS {
+            assert!(url_allowed(url));
+        }
     }
 
     #[test]
@@ -1433,6 +1599,9 @@ mod tests {
         assert!(name_error("Ayoze Torres").is_some());
         assert!(name_error("Ayoze").is_none());
         assert!(name_error("Ayoze_TR").is_none());
+        // A quote would swallow the parameters after it into the name.
+        assert!(name_error("Ayoze\"").is_some());
+        assert!(name_error("Ayo\u{7}ze").is_some());
     }
 
     /// The point of the distinction: a placeholder is Balota's own doing and
@@ -1475,6 +1644,49 @@ mod tests {
     }
 
     #[test]
+    fn host_programs_do_not_inherit_the_appimage_paths() {
+        use std::ffi::OsString;
+        let appdir = Path::new("/tmp/.mount_BalotaX");
+        let vars = [
+            (
+                "LD_LIBRARY_PATH",
+                "/tmp/.mount_BalotaX/usr/lib:/tmp/.mount_BalotaX/lib",
+            ),
+            ("PATH", "/tmp/.mount_BalotaX/usr/bin:/usr/bin:/bin"),
+            ("PYTHONHOME", "/tmp/.mount_BalotaX/usr/"),
+            ("APPDIR", "/tmp/.mount_BalotaX"),
+            ("HOME", "/home/u"),
+            ("XDG_DATA_DIRS", "/usr/share"),
+        ]
+        .map(|(k, v)| (OsString::from(k), OsString::from(v)));
+
+        let mut changes = host_env_changes(appdir, vars.into_iter());
+        changes.sort();
+        assert_eq!(
+            changes,
+            vec![
+                (OsString::from("APPDIR"), None),
+                (OsString::from("LD_LIBRARY_PATH"), None),
+                (
+                    OsString::from("PATH"),
+                    Some(OsString::from("/usr/bin:/bin"))
+                ),
+                (OsString::from("PYTHONHOME"), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn values_with_spaces_survive_steam_joining_the_command_line() {
+        assert_eq!(
+            requote("-profiles=/home/a b/prof"),
+            r#"-profiles="/home/a b/prof""#
+        );
+        assert_eq!(requote("-cpuCount=8"), "-cpuCount=8");
+        assert_eq!(requote("two words"), r#""two words""#);
+    }
+
+    #[test]
     fn finds_the_workshop_helper_next_to_the_binary() {
         let dir = scratch("helper");
         assert!(helper_in(&dir).is_none(), "nothing there yet");
@@ -1510,17 +1722,66 @@ mod tests {
         let helper = bundled.join("balota-workshop");
 
         // Neither copy exists yet, so there is nothing to point at.
-        assert!(steam_lib_dirs(&env, &helper).is_empty());
+        assert!(steam_lib_dir(&env, &helper).is_err());
 
-        // Only Steam's own copy: that one gets used (the .deb case).
-        fs::write(steam.join("libsteam_api.so"), b"x").unwrap();
-        assert_eq!(steam_lib_dirs(&env, &helper), vec![steam.clone()]);
-
-        // With the bundled copy present it comes first: inside an AppImage it
-        // is read-only and known to match this build.
+        // With the bundled copy present it is used as is: inside an AppImage
+        // it is read-only and known to match this build.
         fs::write(bundled.join("libsteam_api.so"), b"x").unwrap();
-        assert_eq!(steam_lib_dirs(&env, &helper)[0], bundled);
+        assert_eq!(steam_lib_dir(&env, &helper).unwrap(), bundled);
 
+        fs::remove_dir_all(&base).ok();
+    }
+
+    /// Steam's own copy is used alone, from a private folder: pointing the
+    /// loader at Steam's folder handed it every other library in there too.
+    #[test]
+    fn steams_library_is_copied_away_from_its_neighbours() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let base = scratch("privlib");
+        let steam = base.join("ubuntu12_64");
+        fs::create_dir_all(&steam).unwrap();
+        fs::write(steam.join("libsteam_api.so"), b"real").unwrap();
+        fs::write(steam.join("libgcc_s.so.1"), b"planted").unwrap();
+
+        let private = base.join("private");
+        let dir = private_copy(&steam.join("libsteam_api.so"), &private).unwrap();
+        assert_eq!(dir, private);
+        assert_eq!(fs::read(dir.join("libsteam_api.so")).unwrap(), b"real");
+        assert!(!dir.join("libgcc_s.so.1").exists());
+        assert_eq!(
+            fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+
+        // An update to Steam's copy is picked up.
+        fs::write(steam.join("libsteam_api.so"), b"newer").unwrap();
+        private_copy(&steam.join("libsteam_api.so"), &private).unwrap();
+        assert_eq!(fs::read(private.join("libsteam_api.so")).unwrap(), b"newer");
+
+        // A link where the folder should be is refused, not followed.
+        let linked = base.join("linked");
+        std::os::unix::fs::symlink(&steam, &linked).unwrap();
+        assert!(private_copy(&steam.join("libsteam_api.so"), &linked).is_err());
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    /// Real meta.cpp files start with other keys; the name used to be read
+    /// only when it happened to be on the first line.
+    #[test]
+    fn reads_the_mod_name_wherever_it_is_in_meta_cpp() {
+        let base = scratch("meta");
+        let meta = base.join("meta.cpp");
+        fs::write(
+            &meta,
+            "protocol = 1;\npublishedid = 1559212036;\nnameExtra = \"x\";\nname = \"Community Framework\";\n",
+        )
+        .unwrap();
+        assert_eq!(
+            mod_name_from_meta(&meta).as_deref(),
+            Some("Community Framework")
+        );
         fs::remove_dir_all(&base).ok();
     }
 
