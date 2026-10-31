@@ -485,6 +485,7 @@ export default function App() {
             aria-label="Support Balota on Ko-fi"
           >
             <Heart size={14} />
+            Ko-fi
           </button>
         </div>
         <div className="status-card">
