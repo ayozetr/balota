@@ -1,0 +1,40 @@
+name: Feature request
+description: Something Balota could do, or do better.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a look at [ROADMAP.md](https://github.com/ayozetr/balota/blob/main/ROADMAP.md)
+        first: it may already be planned, or ruled out with a reason.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The situation, not the solution. What gets in your way today?
+      placeholder: When I play on two servers with different mod sets, I have to…
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like Balota to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How you work around it now
+      description: Another launcher, a script, doing it by hand in Steam…
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Where you would use it
+      multiple: true
+      options:
+        - Desktop with mouse and keyboard
+        - Steam Deck or controller

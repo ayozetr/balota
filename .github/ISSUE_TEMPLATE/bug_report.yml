@@ -1,0 +1,119 @@
+name: Bug report
+description: Something in Balota does not work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The fields below are the ones that usually
+        decide whether a bug can be reproduced, so please fill in what you can.
+
+        If the problem is that **no servers load at all**, check first whether
+        [dayzsalauncher.com](https://dayzsalauncher.com) is up: Balota gets the
+        server list from it. When it is down, Balota shows the last list it
+        saved and can still join servers by asking them directly.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I opened a server from History and pressed Join. I expected DayZ to
+        start and connect; instead the panel said "…".
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Balota
+        2. Search for "…"
+        3. Open the server and press Subscribe
+        4. …
+    validations:
+      required: true
+
+  - type: input
+    id: server
+    attributes:
+      label: Server, if it is about one
+      description: Name and address as shown in the server panel (`ip:port`).
+      placeholder: "KarmaKrew Chernarus #1 — 193.25.252.55:27016"
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: |
+        The exact text of any error toast or panel message. If Balota does not
+        open at all, paste the contents of `~/.cache/balota/last-error.log`.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Balota version
+      description: Shown at the bottom of Settings ▸ About.
+      placeholder: "1.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run Balota
+      options:
+        - AppImage from the releases page
+        - Built from source
+        - Other (please say in the description)
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and desktop
+      placeholder: "CachyOS, KDE Plasma 6 on Wayland"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: steam
+    attributes:
+      label: Steam installation
+      options:
+        - Native (distribution package or steam.deb)
+        - Flatpak
+        - Snap
+        - Steam Deck (SteamOS)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: steam-notes
+    attributes:
+      label: What Settings ▸ Steam installation says
+      description: |
+        Copy the folders and notes listed there. They show where Balota looked
+        for Steam, DayZ and the Workshop, which explains most "mods missing" and
+        "DayZ not found" reports.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, controller model, a second Steam library or SD card, launch parameters…
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: I searched the existing issues and this is not one of them.
+          required: true
+        - label: I removed anything private (Steam account names, home folder names) from what I pasted.
